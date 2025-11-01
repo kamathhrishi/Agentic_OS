@@ -131,6 +131,142 @@ You can type anything here...</textarea>
             </div>
         `
     },
+    mailbox: {
+        title: 'Mailbox',
+        icon: 'fa-envelope',
+        color: 'text-blue-400',
+        content: `
+            <div class="mailbox-container h-full flex flex-col">
+                <div class="mailbox-toolbar mb-4 flex items-center gap-2">
+                    <button class="toolbar-btn" onclick="mailboxRefresh()" title="Refresh">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <button class="toolbar-btn" onclick="mailboxCompose()" title="Compose">
+                        <i class="fas fa-pen"></i> Compose
+                    </button>
+                    <div class="flex-1"></div>
+                    <div class="text-sm text-text-secondary" id="mailbox-status">Loading...</div>
+                </div>
+                <div class="mailbox-content flex-1 overflow-auto" id="mailbox-content">
+                    <div id="mailbox-inbox-view" class="mailbox-view">
+                        <div class="text-center text-text-secondary">Loading inbox...</div>
+                    </div>
+                    <div id="mailbox-compose-view" class="mailbox-view hidden">
+                        <div class="mailbox-compose-form space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-text-secondary">Instructions for AI</label>
+                                <textarea id="compose-instructions" 
+                                    class="w-full bg-input text-black px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm placeholder-text-secondary min-h-[120px]"
+                                    placeholder="Describe the email you want to send. For example: 'Email Alex Johnson at zoebex01@gmail.com about the launch. Mention the roadmap deck and ask for feedback by Friday.'"></textarea>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="mailboxSendEmail()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg transition text-sm font-medium">
+                                    <i class="fas fa-paper-plane mr-2"></i>Send Email
+                                </button>
+                                <button onclick="mailboxBackToInbox()" class="px-4 py-2 bg-input border border-border rounded-lg text-text-secondary hover:text-white transition text-sm">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `
+    },
+    browser: {
+        title: 'Browser',
+        icon: 'fa-globe',
+        color: 'text-green-400',
+        content: `
+            <div class="browser-container h-full flex flex-col">
+                <div class="browser-toolbar mb-2 flex items-center gap-2">
+                    <button class="toolbar-btn" onclick="browserBack()" title="Back" id="browser-back">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <button class="toolbar-btn" onclick="browserForward()" title="Forward" id="browser-forward">
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                    <button class="toolbar-btn" onclick="browserReload()" title="Reload">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <div class="flex-1"></div>
+                    <input type="text" id="browser-url" 
+                        class="flex-1 bg-input text-black px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm"
+                        placeholder="Enter URL or search..."
+                        onkeypress="if(event.key==='Enter') browserNavigate()">
+                    <button class="toolbar-btn" onclick="browserNavigate()" title="Go">
+                        <i class="fas fa-arrow-right"></i> Go
+                    </button>
+                </div>
+                <div class="browser-content flex-1 overflow-auto relative bg-white" id="browser-content">
+                    <div id="browser-placeholder" class="absolute inset-0 flex items-center justify-center">
+                        <div class="text-center text-text-secondary">
+                            <i class="fas fa-globe text-6xl mb-4 opacity-50"></i>
+                            <p>Enter a URL to start browsing</p>
+                        </div>
+                    </div>
+                    <iframe id="browser-iframe" 
+                        class="w-full h-full border-0" 
+                        style="display: none;"
+                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+                        allow="camera; microphone; geolocation">
+                    </iframe>
+                </div>
+            </div>
+        `
+    },
+    slideshow: {
+        title: 'Slideshow',
+        icon: 'fa-presentation',
+        color: 'text-pink-400',
+        content: `
+            <div class="slideshow-container h-full flex flex-col">
+                <div class="slideshow-toolbar mb-2 flex items-center gap-2">
+                    <button class="toolbar-btn" onclick="slideshowCreate()" title="Create New Slideshow">
+                        <i class="fas fa-plus"></i> Create
+                    </button>
+                    <button class="toolbar-btn" onclick="slideshowLoad()" title="Load Slideshow">
+                        <i class="fas fa-folder-open"></i> Load
+                    </button>
+                    <button class="toolbar-btn" onclick="slideshowSave()" title="Save Slideshow">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                    <div class="flex-1"></div>
+                    <div class="text-sm text-text-secondary" id="slideshow-status">Ready</div>
+                </div>
+                <div class="slideshow-content flex-1 flex flex-col">
+                    <div id="slideshow-creator-view" class="slideshow-view h-full flex flex-col">
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2 text-text-secondary">Generate Slideshow</label>
+                            <textarea id="slideshow-prompt" 
+                                class="w-full bg-input text-black px-4 py-3 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-sm placeholder-text-secondary min-h-[100px]"
+                                placeholder="Describe the slideshow you want to create. For example: 'Create a 5-slide presentation about Q4 financial results with charts and key metrics'"></textarea>
+                        </div>
+                        <button onclick="slideshowGenerate()" class="bg-pink-600 hover:bg-pink-500 text-white px-4 py-2 rounded-lg transition text-sm font-medium">
+                            <i class="fas fa-magic mr-2"></i>Generate Slideshow
+                        </button>
+                        <div id="slideshow-preview" class="mt-4 flex-1 overflow-auto bg-white rounded-lg border border-border" style="display: none;">
+                            <iframe id="slideshow-iframe" class="w-full h-full border-0" style="min-height: 400px;"></iframe>
+                        </div>
+                    </div>
+                    <div id="slideshow-player-view" class="slideshow-view hidden h-full">
+                        <div class="relative h-full">
+                            <button class="absolute top-4 left-4 z-10 bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-lg" onclick="slideshowBackToCreator()">
+                                <i class="fas fa-arrow-left mr-2"></i>Back
+                            </button>
+                            <button class="absolute top-4 right-16 z-10 bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-lg" onclick="slideshowPrev()">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button class="absolute top-4 right-4 z-10 bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-lg" onclick="slideshowNext()">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                            <iframe id="slideshow-player-iframe" class="w-full h-full border-0"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `
+    },
     default: {
         title: 'Application',
         icon: 'fa-window-maximize',
@@ -298,12 +434,32 @@ function createWindow(appName = 'default', title = null, position = null) {
     bringToFront(window);
     updateDock();
     
-    // Initialize file manager if needed
+    // Initialize file manager or mailbox if needed
     if (appName === 'file_manager') {
         setTimeout(() => {
             if (typeof fileManagerRefresh === 'function') {
                 fileManagerRefresh();
             }
+        }, 100);
+    } else if (appName === 'mailbox') {
+        setTimeout(() => {
+            if (typeof mailboxRefresh === 'function') {
+                mailboxRefresh();
+            }
+        }, 100);
+    } else if (appName === 'browser') {
+        // Generate unique session ID for this browser window
+        const sessionId = `browser_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        browserWindowSessions.set(windowId, sessionId);
+        
+        // Store session ID in window element for easy access
+        const windowElement = windows.get(windowId)?.element;
+        if (windowElement) {
+            windowElement.dataset.browserSession = sessionId;
+        }
+        
+        setTimeout(() => {
+            // Browser will be ready when user navigates
         }, 100);
     }
     
@@ -344,6 +500,11 @@ function closeWindow(windowId) {
     const win = windows.get(windowId);
     if (!win) return;
     
+    // Clean up browser session if it's a browser window
+    if (win.app === 'browser') {
+        browserWindowSessions.delete(windowId);
+    }
+    
     win.element.remove();
     windows.delete(windowId);
     updateDock();
@@ -358,7 +519,7 @@ function updateDock() {
     dockItems.innerHTML = '';
     
     // Add apps to dock
-    const dockApps = ['file_manager', 'terminal', 'calculator', 'notepad'];
+    const dockApps = ['file_manager', 'terminal', 'calculator', 'notepad', 'mailbox', 'browser', 'slideshow'];
     dockApps.forEach(appName => {
         const app = appTemplates[appName];
         if (!app) return;
@@ -504,6 +665,67 @@ chatForm.addEventListener('submit', async (e) => {
             body: JSON.stringify({ message })
         });
         
+        // Check if response is streaming (text/event-stream)
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/event-stream')) {
+            // Handle streaming response for compilation requests
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let assistantMessageId = null;
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const update = JSON.parse(line.slice(6));
+                            console.log('Received update:', update); // Debug log
+                            
+                            if (update.type === 'progress') {
+                                if (!assistantMessageId) {
+                                    // Create assistant message for progress updates
+                                    assistantMessageId = addChatMessage(update.message, 'assistant', true);
+                                    console.log('Created message with ID:', assistantMessageId);
+                                } else {
+                                    // Update existing message
+                                    updateChatMessage(assistantMessageId, update.message);
+                                    console.log('Updated message:', update.message);
+                                }
+                            } else if (update.type === 'complete') {
+                                if (assistantMessageId) {
+                                    updateChatMessage(assistantMessageId, update.message);
+                                } else {
+                                    addChatMessage(update.message, 'assistant');
+                                }
+                                // Refresh desktop to show new file
+                                refreshDesktop();
+                            } else if (update.type === 'error') {
+                                if (assistantMessageId) {
+                                    updateChatMessage(assistantMessageId, '❌ Error: ' + update.message);
+                                } else {
+                                    addChatMessage('❌ Error: ' + update.message, 'assistant');
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error parsing SSE data:', e, 'Line:', line);
+                        }
+                    } else if (line.trim() === '') {
+                        // Empty line - separator between events
+                        continue;
+                    } else {
+                        console.log('Non-data line:', line);
+                    }
+                }
+            }
+            return;
+        }
+        
+        // Regular JSON response
         const data = await response.json();
         
         // Add assistant message
@@ -511,7 +733,148 @@ chatForm.addEventListener('submit', async (e) => {
         
         // Handle actions
         if (data.action === 'open_app') {
-            createWindow(data.data.app, data.data.title);
+            // Check if browser app with multiple URLs before creating first window
+            if (data.data.app === 'browser' && data.data.navigate_to) {
+                const urls = data.data.multiple_urls || (Array.isArray(data.data.navigate_to) ? data.data.navigate_to : [data.data.navigate_to]);
+                
+                if (Array.isArray(urls) && urls.length > 1) {
+                    // Multiple URLs - open multiple browser windows (don't create the first one yet)
+                    const searchTerms = data.data.search_terms || [];
+                    const autoSearch = data.data.auto_search || false;
+                    
+                    // Use navigate-multiple endpoint to get all sessions with agent goals
+                    const agentGoals = data.data.agent_goals || searchTerms;
+                    
+                    fetch('/api/browser/navigate-multiple', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            urls: urls,
+                            agent_goals: agentGoals
+                        })
+                    }).then(async (response) => {
+                        const navData = await response.json();
+                        if (navData.success && navData.results) {
+                            navData.results.forEach((result, index) => {
+                                setTimeout(() => {
+                                    // Extract better domain name for title
+                                    let domain = result.url.replace(/^https?:\/\//, '').split('/')[0];
+                                    if (domain.includes('.')) {
+                                        const parts = domain.split('.');
+                                        domain = parts.length > 2 ? parts.slice(-2).join('.') : domain;
+                                    }
+                                    
+                                    // Create a new browser window for each URL
+                                    const newWindowId = createWindow('browser', `Browser - ${domain}`);
+                                    const newWindowElement = windows.get(newWindowId)?.element;
+                                    
+                                    if (newWindowElement) {
+                                        // Set the session ID from the result
+                                        newWindowElement.dataset.browserSession = result.session_id;
+                                        browserWindowSessions.set(newWindowId, result.session_id);
+                                        
+                                        const urlInput = newWindowElement.querySelector('#browser-url');
+                                        const iframe = newWindowElement.querySelector('#browser-iframe');
+                                        const placeholder = newWindowElement.querySelector('#browser-placeholder');
+                                        
+                                        if (urlInput && result.proxy_url) {
+                                            urlInput.value = result.url;
+                                            
+                                            // Load the proxied page
+                                            if (iframe) {
+                                                iframe.src = result.proxy_url;
+                                                iframe.style.display = 'block';
+                                                iframe.onload = () => {
+                                                    if (placeholder) placeholder.style.display = 'none';
+                                                };
+                                            }
+                                            
+                                            // Add agent status panel if agent is active
+                                            if (result.agent_goal) {
+                                                addAgentStatusPanel(newWindowElement, result.session_id, result.agent_goal);
+                                                // Start polling agent status
+                                                pollAgentStatus(result.session_id, newWindowElement);
+                                            }
+                                        }
+                                    }
+                                }, index * 300 + 500); // Stagger window creation
+                            });
+                        }
+                    }).catch(error => {
+                        console.error('Error navigating multiple browsers:', error);
+                    });
+                } else {
+                    // Single URL - create one window
+                    const windowId = createWindow(data.data.app, data.data.title);
+                    const singleUrl = Array.isArray(urls) ? urls[0] : urls;
+                    const agentGoal = data.data.agent_goal; // Check if agent goal was provided
+                    
+                    setTimeout(() => {
+                        // Find the browser window we just created
+                        const windowElement = windows.get(windowId)?.element;
+                        if (!windowElement) return;
+                        
+                        const sessionId = windowElement.dataset.browserSession || getBrowserSession();
+                        const urlInput = windowElement.querySelector('#browser-url');
+                        if (urlInput) {
+                            urlInput.value = singleUrl;
+                            // Navigate with the correct session ID and pass agent goal
+                            browserNavigateWithSession(sessionId, singleUrl, windowElement, agentGoal);
+                        }
+                    }, 800);
+                }
+            } else if (data.action === 'open_slideshow') {
+                // Open slideshow with pre-generated content
+                const windowId = createWindow('slideshow', data.data.title || 'Slideshow');
+                setTimeout(() => {
+                    const windowElement = windows.get(windowId)?.element;
+                    if (windowElement && data.data.html) {
+                        // Set the slideshow HTML directly
+                        currentSlideshowHtml = data.data.html;
+                        totalSlides = data.data.slide_count || 1;
+                        currentSlideIndex = 0;
+                        
+                        // Switch directly to player view
+                        const creatorView = windowElement.querySelector('#slideshow-creator-view');
+                        const playerView = windowElement.querySelector('#slideshow-player-view');
+                        const playerIframe = windowElement.querySelector('#slideshow-player-iframe');
+                        const status = windowElement.querySelector('#slideshow-status');
+                        
+                        if (creatorView) creatorView.classList.add('hidden');
+                        if (playerView) {
+                            playerView.classList.remove('hidden');
+                            if (playerIframe) {
+                                playerIframe.srcdoc = data.data.html;
+                                playerIframe.onload = () => {
+                                    showSlide(0);
+                                };
+                            }
+                        }
+                        if (status) status.textContent = `Loaded ${totalSlides} slides`;
+                    }
+                }, 300);
+            } else if (data.data.app === 'slideshow' && data.data.generate_prompt) {
+                // Slideshow app with auto-generation prompt
+                const windowId = createWindow(data.data.app, data.data.title);
+                setTimeout(() => {
+                    const windowElement = windows.get(windowId)?.element;
+                    if (windowElement) {
+                        const promptTextarea = windowElement.querySelector('#slideshow-prompt');
+                        if (promptTextarea) {
+                            promptTextarea.value = data.data.generate_prompt;
+                            // Optionally auto-generate if requested
+                            if (data.data.auto_generate) {
+                                setTimeout(() => {
+                                    slideshowGenerate();
+                                }, 500);
+                            }
+                        }
+                    }
+                }, 300);
+            } else {
+                // Not a browser app or no navigation needed
+                createWindow(data.data.app, data.data.title);
+            }
         } else if (data.action === 'close_all') {
             closeAllWindows();
         } else if (data.action === 'close_window') {
@@ -571,6 +934,68 @@ chatForm.addEventListener('submit', async (e) => {
         } else if (data.action === 'list_files') {
             // Results are already in the response message
             // Could optionally update file manager if open
+        } else if (data.action === 'compose_email') {
+            // Email sent successfully - refresh mailbox if open
+            const mailboxWindow = Array.from(document.querySelectorAll('.window'))
+                .find(w => w.innerHTML.includes('mailbox-container'));
+            if (mailboxWindow) {
+                setTimeout(() => {
+                    if (typeof mailboxRefresh === 'function') {
+                        mailboxRefresh();
+                    }
+                }, 500);
+            }
+        } else if (data.action === 'navigate_browser') {
+            // Open browser and navigate - handled via open_app with navigate_to
+            // But if browser already exists, we can navigate in the existing one
+            const existingBrowserWindows = Array.from(document.querySelectorAll('.window'))
+                .filter(w => w.querySelector('#browser-url'));
+            
+            if (existingBrowserWindows.length > 0) {
+                // Use the topmost browser window
+                const topBrowser = existingBrowserWindows
+                    .sort((a, b) => parseInt(b.style.zIndex || 0) - parseInt(a.style.zIndex || 0))[0];
+                const sessionId = topBrowser.dataset.browserSession || getBrowserSession();
+                const urlInput = topBrowser.querySelector('#browser-url');
+                if (urlInput && data.data && data.data.url) {
+                    urlInput.value = data.data.url;
+                    browserNavigateWithSession(sessionId, data.data.url, topBrowser);
+                }
+            }
+        } else if (data.action === 'control_browser') {
+            // Browser control action completed - refresh the browser iframe
+            if (data.data && data.data.proxy_url) {
+                const existingBrowserWindows = Array.from(document.querySelectorAll('.window'))
+                    .filter(w => w.querySelector('#browser-url'));
+                
+                if (existingBrowserWindows.length > 0) {
+                    // Find the browser window (use the one that matches the session if possible)
+                    const topBrowser = existingBrowserWindows
+                        .sort((a, b) => parseInt(b.style.zIndex || 0) - parseInt(a.style.zIndex || 0))[0];
+                    
+                    const iframe = topBrowser.querySelector('#browser-iframe');
+                    const urlInput = topBrowser.querySelector('#browser-url');
+                    const placeholder = topBrowser.querySelector('#browser-placeholder');
+                    
+                    if (iframe && data.data.proxy_url) {
+                        iframe.src = data.data.proxy_url;
+                        iframe.style.display = 'block';
+                        if (placeholder) placeholder.style.display = 'none';
+                    }
+                    
+                    if (urlInput && data.data.url) {
+                        urlInput.value = data.data.url;
+                    }
+                    
+                    // Update window title
+                    if (data.data.title) {
+                        const titleSpan = topBrowser.querySelector('.window-title span');
+                        if (titleSpan) {
+                            titleSpan.textContent = data.data.title.length > 40 ? data.data.title.substring(0, 40) + '...' : data.data.title;
+                        }
+                    }
+                }
+            }
         }
     } catch (error) {
         addChatMessage('Error: Could not connect to OS assistant.', 'assistant');
@@ -578,9 +1003,12 @@ chatForm.addEventListener('submit', async (e) => {
     }
 });
 
-function addChatMessage(text, type) {
+function addChatMessage(text, type, returnId = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    messageDiv.id = messageId;
+    
     // Handle multi-line messages and preserve line breaks
     // Escape HTML to prevent XSS
     const escapeHtml = (unsafe) => {
@@ -596,6 +1024,27 @@ function addChatMessage(text, type) {
     }).join('<br>');
     messageDiv.innerHTML = formattedText;
     chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return returnId ? messageId : undefined;
+}
+
+function updateChatMessage(messageId, newText) {
+    const messageDiv = document.getElementById(messageId);
+    if (!messageDiv) return;
+    
+    const escapeHtml = (unsafe) => {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    };
+    const formattedText = newText.split('\n').map(line => {
+        return escapeHtml(line) || ' '; // Preserve empty lines
+    }).join('<br>');
+    messageDiv.innerHTML = formattedText;
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
@@ -636,7 +1085,7 @@ document.querySelectorAll('.quick-cmd-btn').forEach(btn => {
 
 // Welcome message
 setTimeout(() => {
-    addChatMessage('Hello! I\'m your OS assistant powered by AI. You can control your OS using natural language. Try commands like:\n- "Create a file called notes.txt with some content"\n- "Find files with .txt extension"\n- "Delete the file notes.txt"\n- "Open calculator"\n- "List all files"\n\nI can create, find, and delete files - just ask me!', 'assistant');
+    addChatMessage('Hello! I\'m your OS assistant powered by AI. You can control your OS using natural language. Try commands like:\n- "Create a file called notes.txt with some content"\n- "Find files with .txt extension"\n- "Delete the file notes.txt"\n- "Open calculator" or "Open mailbox"\n- "Open google.com" or "Visit wikipedia.org"\n- "Open google.com and also open youtube.com" (multiple sites!)\n- "Click the search button" (when browser is open)\n- "Type hello in the search box" (when browser is open)\n- "Scroll down on the page"\n- "List all files"\n- "Email Alex Johnson at zoebex01@gmail.com about the launch"\n\nI can create files, find files, send emails, browse the web, control browsers using AI vision, and open apps - just ask me!', 'assistant');
 }, 500);
 
 // File Manager Functions
@@ -676,6 +1125,9 @@ async function fileManagerRefresh() {
                     if (item.type === 'folder') {
                         currentFileManagerPath = item.path;
                         fileManagerRefresh();
+                    } else if (item.name.endsWith('.html')) {
+                        // Open HTML files in browser
+                        openHtmlFile(item.path);
                     } else {
                         notepadOpenFile(item.path);
                     }
@@ -792,6 +1244,9 @@ async function refreshDesktop() {
                             currentFileManagerPath = item.path;
                             fileManagerRefresh();
                         }, 200);
+                    } else if (item.name.endsWith('.html')) {
+                        // Open HTML files (presentations) in browser
+                        openHtmlFile(item.path);
                     } else {
                         // Open file in notepad
                         createWindow('notepad');
@@ -880,6 +1335,42 @@ async function notepadOpen() {
     await notepadOpenFile(filename);
 }
 
+async function openHtmlFile(path) {
+    try {
+        // Open browser window
+        const windowId = createWindow('browser', path.split('/').pop() || 'Presentation');
+        
+        setTimeout(() => {
+            const windowElement = windows.get(windowId)?.element;
+            if (!windowElement) return;
+            
+            const sessionId = windowElement.dataset.browserSession || getBrowserSession();
+            const iframe = windowElement.querySelector('#browser-iframe');
+            const placeholder = windowElement.querySelector('#browser-placeholder');
+            const urlInput = windowElement.querySelector('#browser-url');
+            
+            // Load the HTML file content
+            fetch(`/api/files/read?path=${encodeURIComponent(path)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (iframe && data.content) {
+                        iframe.srcdoc = data.content;
+                        iframe.style.display = 'block';
+                    }
+                    if (placeholder) placeholder.style.display = 'none';
+                    if (urlInput) urlInput.value = path;
+                })
+                .catch(error => {
+                    console.error('Error loading HTML file:', error);
+                    alert('Error opening presentation');
+                });
+        }, 300);
+    } catch (error) {
+        alert('Error opening presentation');
+        console.error(error);
+    }
+}
+
 async function notepadOpenFile(path) {
     try {
         const response = await fetch(`/api/files/read?path=${encodeURIComponent(path)}`);
@@ -960,8 +1451,749 @@ function createWindowWithInit(appName, title, position) {
     setTimeout(() => {
         if (appName === 'file_manager') {
             fileManagerRefresh();
+        } else if (appName === 'mailbox') {
+            mailboxRefresh();
         }
     }, 100);
     return windowId;
 }
+
+// Mailbox Functions
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+async function mailboxRefresh() {
+    const inboxView = document.getElementById('mailbox-inbox-view');
+    const status = document.getElementById('mailbox-status');
+    
+    if (!inboxView) return;
+    
+    inboxView.innerHTML = '<div class="text-center text-text-secondary">Loading inbox...</div>';
+    if (status) status.textContent = 'Loading...';
+    
+    try {
+        const response = await fetch('/api/email/inbox');
+        const data = await response.json();
+        
+        if (data.success) {
+            if (status) status.textContent = `${data.count} email${data.count !== 1 ? 's' : ''}`;
+            
+            if (data.emails && data.emails.length > 0) {
+                inboxView.innerHTML = '';
+                data.emails.forEach(email => {
+                    const emailItem = document.createElement('div');
+                    emailItem.className = 'mailbox-email-item';
+                    
+                    const timestamp = email.timestamp ? new Date(email.timestamp).toLocaleString() : 'Just now';
+                    const preview = email.body ? escapeHtml(email.body.substring(0, 100) + (email.body.length > 100 ? '...' : '')) : 'No preview';
+                    const to = escapeHtml(email.to || 'Unknown recipient');
+                    const subject = escapeHtml(email.subject || '(No subject)');
+                    const emailId = escapeHtml(String(email.id || ''));
+                    
+                    emailItem.innerHTML = `
+                        <div class="flex items-start gap-4 p-4 border-b border-border hover:bg-hover transition cursor-pointer" data-email-id="${emailId}">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="font-semibold text-black text-sm">${to}</span>
+                                    ${email.status === 'sent' ? '<span class="text-xs px-2 py-0.5 bg-green-500/20 text-green-600 rounded">Sent</span>' : ''}
+                                </div>
+                                <div class="font-medium text-black text-sm mb-1">${subject}</div>
+                                <div class="text-xs text-text-secondary line-clamp-2">${preview}</div>
+                                <div class="text-xs text-text-secondary mt-2">${escapeHtml(timestamp)}</div>
+                            </div>
+                        </div>
+                    `;
+                    emailItem.querySelector('[data-email-id]').addEventListener('click', () => {
+                        mailboxViewEmail(emailId);
+                    });
+                    inboxView.appendChild(emailItem);
+                });
+            } else {
+                inboxView.innerHTML = `
+                    <div class="text-center text-text-secondary py-12">
+                        <i class="fas fa-inbox text-4xl mb-4 opacity-50"></i>
+                        <p>No emails yet</p>
+                        <p class="text-xs mt-2">Click "Compose" to send your first email</p>
+                    </div>
+                `;
+            }
+        } else {
+            inboxView.innerHTML = '<div class="text-center text-red-500">Error loading inbox</div>';
+        }
+    } catch (error) {
+        inboxView.innerHTML = '<div class="text-center text-red-500">Error loading inbox</div>';
+        console.error(error);
+    }
+}
+
+function mailboxCompose() {
+    const inboxView = document.getElementById('mailbox-inbox-view');
+    const composeView = document.getElementById('mailbox-compose-view');
+    const instructionsTextarea = document.getElementById('compose-instructions');
+    
+    if (inboxView) inboxView.classList.add('hidden');
+    if (composeView) {
+        composeView.classList.remove('hidden');
+        if (instructionsTextarea) {
+            instructionsTextarea.value = '';
+            instructionsTextarea.focus();
+        }
+    }
+}
+
+function mailboxBackToInbox() {
+    const inboxView = document.getElementById('mailbox-inbox-view');
+    const composeView = document.getElementById('mailbox-compose-view');
+    const instructionsTextarea = document.getElementById('compose-instructions');
+    
+    if (composeView) composeView.classList.add('hidden');
+    if (inboxView) inboxView.classList.remove('hidden');
+    if (instructionsTextarea) instructionsTextarea.value = '';
+}
+
+async function mailboxSendEmail() {
+    const instructionsTextarea = document.getElementById('compose-instructions');
+    const status = document.getElementById('mailbox-status');
+    
+    if (!instructionsTextarea) return;
+    
+    const instructions = instructionsTextarea.value.trim();
+    if (!instructions) {
+        alert('Please enter instructions for the email');
+        return;
+    }
+    
+    if (status) status.textContent = 'Sending...';
+    
+    const response = await fetch('/api/email/compose-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instructions })
+    });
+    
+    const data = await response.json();
+    console.log('Email API Response:', data);
+    
+    if (data.success) {
+        instructionsTextarea.value = '';
+        mailboxBackToInbox();
+        mailboxRefresh();
+        alert('Email sent successfully!');
+    } else {
+        alert('Error sending email. Please try again.');
+    }
+    if (status) status.textContent = '';
+}
+
+function mailboxViewEmail(emailId) {
+    // For now, just show a simple view - could be expanded to show full email
+    // This could open a modal or detailed view
+    alert('Email detail view - Coming soon!');
+}
+
+// Browser Functions
+let browserWindowSessions = new Map(); // Map window IDs to session IDs
+
+function getBrowserSession() {
+    // Find the active browser window and get its session
+    const browserWindows = Array.from(document.querySelectorAll('.window'))
+        .filter(w => w.querySelector('#browser-url'));
+    
+    if (browserWindows.length === 0) return 'default';
+    
+    // Get the topmost browser window
+    const topBrowserWindow = browserWindows
+        .sort((a, b) => parseInt(b.style.zIndex || 0) - parseInt(a.style.zIndex || 0))[0];
+    
+    if (topBrowserWindow && topBrowserWindow.dataset.browserSession) {
+        return topBrowserWindow.dataset.browserSession;
+    }
+    
+    // Fallback: try to get from window ID
+    const windowId = topBrowserWindow?.id;
+    if (windowId && browserWindowSessions.has(windowId)) {
+        return browserWindowSessions.get(windowId);
+    }
+    
+    return 'default';
+}
+
+async function browserNavigateWithSession(sessionId, url, windowElement = null, agentGoal = null) {
+    // If no window element provided, find the current one
+    if (!windowElement) {
+        const browserWindows = Array.from(document.querySelectorAll('.window'))
+            .filter(w => w.querySelector('#browser-url'));
+        windowElement = browserWindows
+            .sort((a, b) => parseInt(b.style.zIndex || 0) - parseInt(a.style.zIndex || 0))[0];
+    }
+    
+    if (!windowElement) return;
+    
+    const urlInput = windowElement.querySelector('#browser-url');
+    const contentDiv = windowElement.querySelector('#browser-content');
+    const iframe = windowElement.querySelector('#browser-iframe');
+    const placeholder = windowElement.querySelector('#browser-placeholder');
+    
+    if (!urlInput || !contentDiv) return;
+    
+    urlInput.value = url;
+    
+    // Show loading
+    if (placeholder) placeholder.style.display = 'flex';
+    if (iframe) iframe.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/browser/navigate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, session_id: sessionId, agent_goal: agentGoal })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            if (urlInput) urlInput.value = data.url;
+            
+            // Load the proxied page in iframe
+            if (iframe && data.proxy_url) {
+                iframe.src = data.proxy_url;
+                iframe.style.display = 'block';
+                iframe.onload = () => {
+                    if (placeholder) placeholder.style.display = 'none';
+                };
+            } else {
+                if (placeholder) placeholder.style.display = 'none';
+            }
+            
+            // Update window title if possible
+            if (windowElement && data.title) {
+                const titleSpan = windowElement.querySelector('.window-title span');
+                if (titleSpan) {
+                    titleSpan.textContent = data.title.length > 40 ? data.title.substring(0, 40) + '...' : data.title;
+                }
+            }
+            
+            // If agent goal is set, start the agent and add status panel
+            if (data.agent_goal) {
+                addAgentStatusPanel(windowElement, sessionId, data.agent_goal);
+                pollAgentStatus(sessionId, windowElement);
+            }
+        } else {
+            alert('Error navigating to URL');
+            if (placeholder) placeholder.style.display = 'flex';
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+        console.error(error);
+        if (placeholder) placeholder.style.display = 'flex';
+    }
+}
+
+async function browserNavigate(sessionId = null) {
+    const urlInput = document.getElementById('browser-url');
+    const contentDiv = document.getElementById('browser-content');
+    const iframe = document.getElementById('browser-iframe');
+    const placeholder = document.getElementById('browser-placeholder');
+    
+    if (!urlInput || !contentDiv) return;
+    
+    const url = urlInput.value.trim();
+    if (!url) return;
+    
+    // Get session ID for this browser window
+    if (!sessionId) {
+        sessionId = getBrowserSession();
+    }
+    
+    // Show loading
+    if (placeholder) placeholder.style.display = 'flex';
+    if (iframe) iframe.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/browser/navigate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, session_id: sessionId })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            urlInput.value = data.url;
+            
+            // Load the proxied page in iframe
+            if (iframe && data.proxy_url) {
+                iframe.src = data.proxy_url;
+                iframe.style.display = 'block';
+                iframe.onload = () => {
+                    if (placeholder) placeholder.style.display = 'none';
+                };
+            } else {
+                if (placeholder) placeholder.style.display = 'none';
+            }
+            
+            // Update window title if possible
+            const browserWindow = contentDiv.closest('.window');
+            if (browserWindow && data.title) {
+                const titleSpan = browserWindow.querySelector('.window-title span');
+                if (titleSpan) {
+                    titleSpan.textContent = data.title.length > 40 ? data.title.substring(0, 40) + '...' : data.title;
+                }
+            }
+        } else {
+            alert('Error navigating to URL');
+            if (placeholder) placeholder.style.display = 'flex';
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+        console.error(error);
+        if (placeholder) placeholder.style.display = 'flex';
+    }
+}
+
+async function browserReload() {
+    const urlInput = document.getElementById('browser-url');
+    if (!urlInput || !urlInput.value) return;
+    
+    await browserNavigate();
+}
+
+async function browserBack() {
+    const sessionId = getBrowserSession();
+    try {
+        const response = await fetch('/api/browser/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'back', session_id: sessionId })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const urlInput = document.getElementById('browser-url');
+            const iframe = document.getElementById('browser-iframe');
+            const placeholder = document.getElementById('browser-placeholder');
+            
+            if (urlInput) urlInput.value = data.url;
+            if (iframe && data.proxy_url) {
+                iframe.src = data.proxy_url;
+                iframe.style.display = 'block';
+            }
+            if (placeholder) placeholder.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error going back:', error);
+    }
+}
+
+async function browserForward() {
+    const sessionId = getBrowserSession();
+    try {
+        const response = await fetch('/api/browser/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'forward', session_id: sessionId })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const urlInput = document.getElementById('browser-url');
+            const iframe = document.getElementById('browser-iframe');
+            const placeholder = document.getElementById('browser-placeholder');
+            
+            if (urlInput) urlInput.value = data.url;
+            if (iframe && data.proxy_url) {
+                iframe.src = data.proxy_url;
+                iframe.style.display = 'block';
+            }
+            if (placeholder) placeholder.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error going forward:', error);
+    }
+}
+
+// Note: Clicks and interactions now work directly in the iframe
+// The iframe loads the proxied HTML which includes interactive elements
+
+// Perform automatic browser search
+async function performBrowserSearch(sessionId, searchTerm, windowElement) {
+    if (!sessionId || !searchTerm) return;
+    
+    try {
+        // Directly call control_browser endpoint with the search command
+        const response = await fetch('/api/browser/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                command: `type ${searchTerm} in the search box and click the search button or press enter`,
+                session_id: sessionId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.data && data.data.proxy_url) {
+            // Update the browser iframe
+            const iframe = windowElement.querySelector('#browser-iframe');
+            const urlInput = windowElement.querySelector('#browser-url');
+            const placeholder = windowElement.querySelector('#browser-placeholder');
+            
+            if (iframe && data.data.proxy_url) {
+                iframe.src = data.data.proxy_url;
+                iframe.style.display = 'block';
+            }
+            if (placeholder) placeholder.style.display = 'none';
+            if (urlInput && data.data.url) {
+                urlInput.value = data.data.url;
+            }
+        }
+    } catch (error) {
+        console.error('Error performing automatic search:', error);
+    }
+}
+
+// Agent Status Functions
+function addAgentStatusPanel(windowElement, sessionId, goal) {
+    if (!windowElement) return;
+    
+    // Check if panel already exists
+    let panel = windowElement.querySelector('.agent-status-panel');
+    if (panel) return;
+    
+    const browserContent = windowElement.querySelector('#browser-content');
+    if (!browserContent) return;
+    
+    // Create agent status panel
+    panel = document.createElement('div');
+    panel.className = 'agent-status-panel bg-slate-900/90 border-t border-slate-700 p-3 text-white text-xs';
+    panel.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+                <div class="agent-status-indicator w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></div>
+                <span class="font-semibold">Agent Active</span>
+            </div>
+            <button class="toggle-logs-btn text-slate-400 hover:text-white" onclick="toggleAgentLogs(this)">
+                <i class="fas fa-chevron-down"></i>
+            </button>
+        </div>
+        <div class="agent-goal text-slate-300 mb-2">${goal}</div>
+        <div class="agent-logs-container hidden max-h-40 overflow-y-auto space-y-1"></div>
+    `;
+    
+    panel.dataset.sessionId = sessionId;
+    browserContent.appendChild(panel);
+}
+
+function pollAgentStatus(sessionId, windowElement) {
+    const panel = windowElement.querySelector('.agent-status-panel');
+    if (!panel) return;
+    
+    const statusIndicator = panel.querySelector('.agent-status-indicator');
+    const logsContainer = panel.querySelector('.agent-logs-container');
+    
+    const poll = async () => {
+        try {
+            const response = await fetch(`/api/browser/agent/${sessionId}`);
+            const data = await response.json();
+            
+            // Update status indicator
+            if (statusIndicator) {
+                const colors = {
+                    'idle': 'bg-gray-400',
+                    'active': 'bg-green-400',
+                    'thinking': 'bg-yellow-400 animate-pulse',
+                    'analyzing': 'bg-blue-400 animate-pulse',
+                    'planning': 'bg-purple-400 animate-pulse',
+                    'executing': 'bg-orange-400 animate-pulse',
+                    'completed': 'bg-green-500',
+                    'error': 'bg-red-400'
+                };
+                statusIndicator.className = `agent-status-indicator w-2 h-2 rounded-full ${colors[data.status] || 'bg-gray-400'}`;
+            }
+            
+            // Update logs
+            if (logsContainer && data.logs && data.logs.length > 0) {
+                logsContainer.innerHTML = '';
+                data.logs.slice(-10).forEach(log => {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'text-slate-400 text-xs flex items-start gap-2';
+                    
+                    const icon = {
+                        'analyzing': '📸',
+                        'planning': '🧠',
+                        'click': '🖱️',
+                        'type': '⌨️',
+                        'scroll': '📜',
+                        'done': '✅',
+                        'error': '❌',
+                        'started': '🚀',
+                        'goal_set': '📝'
+                    }[log.action] || '•';
+                    
+                    const time = new Date(log.timestamp).toLocaleTimeString();
+                    logEntry.innerHTML = `
+                        <span>${icon}</span>
+                        <span class="flex-1">
+                            <span class="text-slate-500">[${time}]</span> ${log.message || ''}
+                            ${log.progress ? `<div class="text-slate-500 ml-4">${log.progress}</div>` : ''}
+                            ${log.next ? `<div class="text-slate-500 ml-4">➡️ ${log.next}</div>` : ''}
+                        </span>
+                    `;
+                    logsContainer.appendChild(logEntry);
+                });
+            }
+            
+            // Continue polling if agent is active
+            if (data.status !== 'completed' && data.status !== 'error') {
+                setTimeout(poll, 2000); // Poll every 2 seconds
+            } else if (data.status === 'completed') {
+                if (statusIndicator) {
+                    statusIndicator.className = 'agent-status-indicator w-2 h-2 rounded-full bg-green-500';
+                }
+            }
+        } catch (error) {
+            console.error('Error polling agent status:', error);
+            setTimeout(poll, 5000); // Retry after 5 seconds on error
+        }
+    };
+    
+    // Start polling
+    poll();
+}
+
+function toggleAgentLogs(btn) {
+    const panel = btn.closest('.agent-status-panel');
+    const logsContainer = panel.querySelector('.agent-logs-container');
+    const icon = btn.querySelector('i');
+    
+    if (logsContainer.classList.contains('hidden')) {
+        logsContainer.classList.remove('hidden');
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-chevron-up');
+    } else {
+        logsContainer.classList.add('hidden');
+        icon.classList.remove('fa-chevron-up');
+        icon.classList.add('fa-chevron-down');
+    }
+}
+
+// Slideshow Functions
+let currentSlideshowHtml = '';
+let currentSlideIndex = 0;
+let totalSlides = 0;
+let selectedTemplate = 'modern';
+
+function selectTemplate(template) {
+    selectedTemplate = template;
+    // Update UI
+    document.querySelectorAll('.template-option').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[data-template="${template}"]`)?.classList.add('active');
+}
+
+async function slideshowGenerate(promptText = null, autoTemplate = null) {
+    const prompt = document.getElementById('slideshow-prompt');
+    const status = document.getElementById('slideshow-status');
+    const preview = document.getElementById('slideshow-preview');
+    const iframe = document.getElementById('slideshow-iframe');
+    
+    const finalPrompt = promptText || (prompt ? prompt.value.trim() : '');
+    if (!finalPrompt) {
+        alert('Please enter a description for the slideshow');
+        return;
+    }
+    
+    if (status) status.textContent = 'Generating slideshow...';
+    
+    // Use selected template or auto-selected one
+    const templateToUse = autoTemplate || selectedTemplate;
+    
+    try {
+        const response = await fetch('/api/slideshow/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                prompt: finalPrompt,
+                template_style: templateToUse 
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.html) {
+            currentSlideshowHtml = data.html;
+            totalSlides = data.slide_count || 1;
+            currentSlideIndex = 0;
+            
+            // Show preview
+            if (preview) preview.style.display = 'block';
+            if (iframe) {
+                iframe.srcdoc = currentSlideshowHtml;
+            }
+            
+            if (status) status.textContent = `Generated ${totalSlides} slides`;
+            
+            // Switch to player view
+            slideshowShowPlayer();
+        } else {
+            alert('Error generating slideshow: ' + (data.error || 'Unknown error'));
+            if (status) status.textContent = 'Error';
+        }
+    } catch (error) {
+        alert('Error generating slideshow: ' + error.message);
+        console.error(error);
+        if (status) status.textContent = 'Error';
+    }
+}
+
+function slideshowShowPlayer() {
+    const creatorView = document.getElementById('slideshow-creator-view');
+    const playerView = document.getElementById('slideshow-player-view');
+    const playerIframe = document.getElementById('slideshow-player-iframe');
+    
+    if (creatorView) creatorView.classList.add('hidden');
+    if (playerView) {
+        playerView.classList.remove('hidden');
+        if (playerIframe && currentSlideshowHtml) {
+            playerIframe.srcdoc = currentSlideshowHtml;
+            // Wait for iframe to load then navigate to first slide
+            playerIframe.onload = () => {
+                try {
+                    const iframeDoc = playerIframe.contentDocument || playerIframe.contentWindow.document;
+                    if (iframeDoc) {
+                        // Navigate to first slide
+                        showSlide(0);
+                    }
+                } catch (e) {
+                    console.error('Error accessing iframe:', e);
+                }
+            };
+        }
+    }
+}
+
+function slideshowBackToCreator() {
+    const creatorView = document.getElementById('slideshow-creator-view');
+    const playerView = document.getElementById('slideshow-player-view');
+    
+    if (playerView) playerView.classList.add('hidden');
+    if (creatorView) creatorView.classList.remove('hidden');
+}
+
+function showSlide(index) {
+    const playerIframe = document.getElementById('slideshow-player-iframe');
+    if (!playerIframe || !currentSlideshowHtml) return;
+    
+    try {
+        const iframeDoc = playerIframe.contentDocument || playerIframe.contentWindow.document;
+        if (!iframeDoc) return;
+        
+        const slides = iframeDoc.querySelectorAll('.slide');
+        if (slides.length === 0) return;
+        
+        totalSlides = slides.length;
+        currentSlideIndex = Math.max(0, Math.min(index, totalSlides - 1));
+        
+        // Hide all slides
+        slides.forEach((slide, i) => {
+            slide.style.display = i === currentSlideIndex ? 'flex' : 'none';
+        });
+        
+        // Update slide indicator if it exists
+        const indicator = iframeDoc.querySelector('.slide-indicator');
+        if (indicator) {
+            indicator.textContent = `${currentSlideIndex + 1} / ${totalSlides}`;
+        }
+    } catch (e) {
+        console.error('Error showing slide:', e);
+    }
+}
+
+function slideshowNext() {
+    showSlide(currentSlideIndex + 1);
+}
+
+function slideshowPrev() {
+    showSlide(currentSlideIndex - 1);
+}
+
+async function slideshowCreate() {
+    const prompt = document.getElementById('slideshow-prompt');
+    if (prompt) prompt.value = '';
+    const preview = document.getElementById('slideshow-preview');
+    if (preview) preview.style.display = 'none';
+    currentSlideshowHtml = '';
+}
+
+async function slideshowLoad() {
+    const filename = prompt('Enter slideshow file name:');
+    if (!filename) return;
+    
+    try {
+        const response = await fetch(`/api/files/read?path=${encodeURIComponent(filename)}`);
+        const data = await response.json();
+        
+        if (data.content) {
+            currentSlideshowHtml = data.content;
+            const preview = document.getElementById('slideshow-preview');
+            const iframe = document.getElementById('slideshow-iframe');
+            if (preview) preview.style.display = 'block';
+            if (iframe) iframe.srcdoc = data.content;
+            slideshowShowPlayer();
+        }
+    } catch (error) {
+        alert('Error loading slideshow: ' + error.message);
+    }
+}
+
+async function slideshowSave() {
+    if (!currentSlideshowHtml) {
+        alert('No slideshow to save');
+        return;
+    }
+    
+    const filename = prompt('Enter file name:', 'slideshow.html');
+    if (!filename) return;
+    
+    try {
+        const response = await fetch('/api/files/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                path: filename.endsWith('.html') ? filename : filename + '.html',
+                content: currentSlideshowHtml
+            })
+        });
+        
+        if (response.ok) {
+            alert('Slideshow saved!');
+            refreshDesktop();
+        } else {
+            alert('Error saving slideshow');
+        }
+    } catch (error) {
+        alert('Error saving slideshow: ' + error.message);
+    }
+}
+
+// Keyboard navigation for slideshow
+document.addEventListener('keydown', (e) => {
+    const playerView = document.getElementById('slideshow-player-view');
+    if (playerView && !playerView.classList.contains('hidden')) {
+        if (e.key === 'ArrowRight' || e.key === ' ') {
+            e.preventDefault();
+            slideshowNext();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            slideshowPrev();
+        }
+    }
+});
 

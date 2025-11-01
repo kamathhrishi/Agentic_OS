@@ -130,6 +130,14 @@ body {
     background: linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(217, 119, 6, 0.3));
 }
 
+.desktop-icon[data-app="mailbox"] .icon-wrapper {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(99, 102, 241, 0.3));
+}
+
+.desktop-icon[data-app="browser"] .icon-wrapper {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.3));
+}
+
 .icon-label {
     color: rgba(0, 0, 0, 0.8);
     font-size: 11px;
@@ -667,6 +675,193 @@ body {
 ::selection {
     background: rgba(59, 130, 246, 0.2);
     color: rgba(0, 0, 0, 0.9);
+}
+
+/* Mailbox Styles */
+.mailbox-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+}
+
+.mailbox-toolbar {
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    padding-bottom: 12px;
+}
+
+.mailbox-content {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.mailbox-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.mailbox-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.mailbox-content::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.mailbox-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.mailbox-view {
+    width: 100%;
+}
+
+.mailbox-email-item {
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    transition: all 0.2s;
+}
+
+.mailbox-email-item:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.mailbox-compose-form {
+    padding: 12px;
+}
+
+.mailbox-compose-form textarea {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    resize: vertical;
+}
+
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Browser Styles */
+.browser-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+}
+
+.browser-toolbar {
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    padding-bottom: 8px;
+}
+
+.browser-content {
+    background: rgba(0, 0, 0, 0.02);
+    position: relative;
+}
+
+#browser-iframe {
+    background: white;
+}
+
+#browser-placeholder {
+    background: rgba(0, 0, 0, 0.02);
+    z-index: 10;
+}
+
+/* Slideshow Styles */
+.slideshow-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+}
+
+.slideshow-toolbar {
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    padding-bottom: 12px;
+}
+
+.slideshow-content {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.slideshow-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.slideshow-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.slideshow-content::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.slideshow-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.slideshow-view {
+    overflow: auto;
+}
+
+.slideshow-view.hidden {
+    display: none;
+}
+
+#slideshow-iframe,
+#slideshow-player-iframe {
+    border-radius: 8px;
+    background: white;
+}
+
+/* Template Selector Styles */
+.slideshow-template-selector {
+    margin-bottom: 16px;
+}
+
+.template-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.template-option:hover {
+    border-color: rgba(236, 72, 153, 0.5);
+    background: rgba(236, 72, 153, 0.05);
+}
+
+.template-option.active {
+    border-color: #ec4899;
+    background: rgba(236, 72, 153, 0.1);
+}
+
+.template-preview {
+    width: 100%;
+    height: 60px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+
+.modern-preview {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.minimal-preview {
+    background: #ffffff;
+    border-left: 4px solid #667eea;
+}
+
+.dark-preview {
+    background: #0a0a0a;
+}
+
+.corporate-preview {
+    background: #f8f9fa;
+    border-top: 3px solid #0066cc;
+}
+
+.creative-preview {
+    background: linear-gradient(45deg, #ff6b6b 0%, #4ecdc4 100%);
 }
 
 /* Responsive */
