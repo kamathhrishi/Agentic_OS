@@ -6,7 +6,7 @@ import os
 import uvicorn
 from pathlib import Path
 from pydantic import BaseModel
-from typing import List, Optional, AsyncGenerator
+from typing import List, Optional, AsyncGenerator, Tuple, Dict, Any
 import json
 import asyncio
 import logging
@@ -17,6 +17,11 @@ import httpx
 import base64 as b64
 from voice_agent import initialize_voice_agent, get_voice_agent, VoiceConfig
 from slide_templates import HTML_TEMPLATE, SLIDE_TEMPLATES, create_slide_content
+from hyperspell_integration import (
+    get_hyperspell_client,
+    format_memories_for_prompt,
+    HyperspellMemory,
+)
 from datetime import datetime
 from playwright.async_api import async_playwright, Browser, Page
 import base64
@@ -49,6 +54,15 @@ if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY not found in .env file. Please create a .env file with your OpenAI API key.")
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Hyperspell integration toggle
+HYPERSPELL_API_KEY = os.getenv("HYPERSPELL_API_KEY", "").strip()
+HYPERSPELL_ENABLED = bool(HYPERSPELL_API_KEY)
+
+if HYPERSPELL_ENABLED:
+    logger.info("Hyperspell integration enabled; context-aware responses will include Notion and calendar data." )
+else:
+    logger.info("Hyperspell integration disabled; set HYPERSPELL_API_KEY to enable contextual sync.")
 
 # Initialize Voice Agent for STT → LLM → TTS pipeline
 voice_config = VoiceConfig(
@@ -126,6 +140,146 @@ def add_to_conversation_history(session_id: str, user_message: str, assistant_re
     max_messages = 4 * 2  # 4 pairs * 2 messages per pair
     if len(conversation_history[session_id]) > max_messages:
         conversation_history[session_id] = conversation_history[session_id][-max_messages:]
+
+
+# Hyperspell context helpers
+HYPERSPELL_CALENDAR_KEYWORDS = {
+    "calendar",
+    "schedule",
+    "meeting",
+    "meetings",
+    "appointments",
+    "appointment",
+    "availability",
+    "event",
+    "events",
+    "reminder",
+    "reminders",
+}
+
+HYPERSPELL_NOTION_KEYWORDS = {
+    "notion",
+    "workspace",
+    "wiki",
+    "knowledge base",
+    "knowledgebase",
+    "notes",
+    "note",
+    "docs",
+    "document",
+    "documents",
+    "page",
+    "pages",
+    "database",
+    "roadmap",
+    "spec",
+    "specs",
+    "project plan",
+}
+
+
+def detect_hyperspell_sources(
+    user_message: str,
+    recent_history: Optional[List[Dict[str, str]]] = None,
+) -> List[str]:
+    """Determine which Hyperspell sources should be queried for a request."""
+
+    search_targets = [user_message]
+
+    if recent_history:
+        # Inspect the two most recent user messages to capture follow-ups like "what about tomorrow?"
+        user_turns = [msg.get("content", "") for msg in recent_history if msg.get("role") == "user"]
+        for content in reversed(user_turns[-2:]):
+            search_targets.append(content)
+
+    sources: List[str] = []
+    for text in search_targets:
+        lowered = text.lower()
+        if any(keyword in lowered for keyword in HYPERSPELL_CALENDAR_KEYWORDS):
+            if "calendar" not in sources:
+                sources.append("calendar")
+        if any(keyword in lowered for keyword in HYPERSPELL_NOTION_KEYWORDS):
+            if "notion" not in sources:
+                sources.append("notion")
+
+    return sources
+
+
+async def fetch_hyperspell_context(
+    session_id: str,
+    user_message: str,
+    sources: List[str],
+    *,
+    limit: int = 5,
+) -> List[HyperspellMemory]:
+    """Fetch context from Hyperspell if integration is enabled."""
+
+    if not (HYPERSPELL_ENABLED and sources):
+        return []
+
+    client = get_hyperspell_client()
+    if not client.is_configured:
+        return []
+
+    return await client.fetch_context(
+        session_id,
+        user_message,
+        sources=sources,
+        limit=limit,
+    )
+
+
+def schedule_hyperspell_record(
+    session_id: str,
+    user_message: str,
+    assistant_message: str,
+    *,
+    sources: Optional[List[str]] = None,
+    context_used: Optional[List[HyperspellMemory]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Record the turn with Hyperspell without blocking the response."""
+
+    if not HYPERSPELL_ENABLED:
+        return
+
+    client = get_hyperspell_client()
+    if not client.supports_recording:
+        return
+
+    payload_metadata: Dict[str, Any] = {}
+    if metadata:
+        payload_metadata.update(metadata)
+    if sources:
+        payload_metadata.setdefault("sources", sources)
+    if context_used:
+        payload_metadata["context_used"] = [
+            {
+                "source": memory.source,
+                "title": memory.title,
+                "url": memory.url,
+                "timestamp": memory.timestamp,
+            }
+            for memory in context_used
+        ]
+
+    async def _record():
+        try:
+            await client.record_interaction(
+                session_id,
+                user_message=user_message,
+                assistant_message=assistant_message,
+                sources=sources,
+                metadata=payload_metadata or None,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to record interaction with Hyperspell: %s", exc)
+
+    try:
+        asyncio.create_task(_record())
+    except RuntimeError:
+        # Fallback: run synchronously as last resort
+        asyncio.run(_record())
 
 # Pydantic models
 class FileContent(BaseModel):
@@ -520,6 +674,9 @@ IMPORTANT:
         
         return True, "Valid"
     
+    hyperspell_sources: List[str] = []
+    hyperspell_context_memories: List[HyperspellMemory] = []
+
     try:
         # Log the full system prompt
         logger.info("=" * 80)
@@ -537,9 +694,43 @@ IMPORTANT:
         
         # Get conversation history (last 4 pairs = 8 messages)
         history_messages = get_conversation_history(session_id, max_pairs=4)
-        
-        # Build messages array with system prompt, history, and current user message
+
+        # Hyperspell context enrichment
+        hyperspell_sources = detect_hyperspell_sources(user_message, history_messages)
+        if hyperspell_sources:
+            hyperspell_context_memories = await fetch_hyperspell_context(
+                session_id,
+                user_message,
+                hyperspell_sources,
+                limit=6,
+            )
+            if hyperspell_context_memories:
+                logger.info(
+                    "Retrieved %d Hyperspell memories for session %s from sources: %s",
+                    len(hyperspell_context_memories),
+                    session_id,
+                    ", ".join(hyperspell_sources),
+                )
+
+        formatted_hyperspell_context = ""
+        if hyperspell_context_memories:
+            formatted_hyperspell_context = format_memories_for_prompt(
+                hyperspell_context_memories
+            )
+
+        # Build messages array with system prompt, optional Hyperspell context, history, and current user message
         messages = [{"role": "system", "content": system_prompt}]
+        if formatted_hyperspell_context:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Context retrieved from Hyperspell "
+                        f"(sources: {', '.join(hyperspell_sources)}):\n"
+                        f"{formatted_hyperspell_context}"
+                    ),
+                }
+            )
         messages.extend(history_messages)  # Add conversation history
         messages.append({"role": "user", "content": user_message})  # Add current user message
         
@@ -1210,6 +1401,22 @@ Be precise with coordinates - they should match pixel positions in the 1280x720 
                 llm_response["response"] = f"Error controlling browser: {str(e)}"
                 llm_response["action"] = None
         
+        # Record interaction with Hyperspell memory layer (non-blocking)
+        if llm_response:
+            metadata: Dict[str, Any] = {}
+            action_field = llm_response.get("action")
+            if action_field is not None:
+                metadata["action"] = action_field
+
+            schedule_hyperspell_record(
+                session_id,
+                user_message,
+                llm_response.get("response", ""),
+                sources=hyperspell_sources or None,
+                context_used=hyperspell_context_memories or None,
+                metadata=metadata or None,
+            )
+
         # Store conversation history (only if we got a successful response)
         if llm_response and raw_response:
             # Store the raw JSON response as assistant message for conversation context
