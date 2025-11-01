@@ -1,7 +1,7 @@
 :root {
     --sidebar-width: 380px;
     --menu-bar-height: 28px;
-    --dock-height: 80px;
+    --dock-height: 0px;
 }
 
 * {
@@ -102,6 +102,7 @@ body {
 }
 
 .icon-wrapper {
+    position: relative;
     width: 72px;
     height: 72px;
     display: flex;
@@ -122,10 +123,6 @@ body {
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.3));
 }
 
-.desktop-icon[data-app="calculator"] .icon-wrapper {
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(124, 58, 237, 0.3));
-}
-
 .desktop-icon[data-app="notepad"] .icon-wrapper {
     background: linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(217, 119, 6, 0.3));
 }
@@ -138,6 +135,14 @@ body {
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.3));
 }
 
+.desktop-icon[data-app="scheduled_processes"] .icon-wrapper {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(124, 58, 237, 0.3));
+}
+
+.desktop-icon[data-app="slideshow"] .icon-wrapper {
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.3), rgba(219, 39, 119, 0.3));
+}
+
 .icon-label {
     color: rgba(0, 0, 0, 0.8);
     font-size: 11px;
@@ -145,6 +150,25 @@ body {
     margin-top: 6px;
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
     text-align: center;
+}
+
+.desktop-icon-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #ef4444;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    z-index: 10;
 }
 
 /* macOS Windows */
@@ -442,65 +466,6 @@ body {
 }
 
 /* App-specific styles */
-.calculator-display {
-    background: rgba(0, 0, 0, 0.05);
-    border: 0.5px solid rgba(0, 0, 0, 0.1);
-    border-radius: 12px;
-    padding: 24px;
-    text-align: right;
-    font-size: 40px;
-    font-weight: 300;
-    margin-bottom: 20px;
-    min-height: 100px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui;
-    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(10px);
-    color: rgba(0, 0, 0, 0.9);
-}
-
-.calculator-buttons {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-}
-
-.calc-btn {
-    padding: 20px;
-    border: none;
-    border-radius: 12px;
-    background: rgba(0, 0, 0, 0.04);
-    backdrop-filter: blur(10px);
-    color: rgba(0, 0, 0, 0.85);
-    font-size: 20px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    border: 0.5px solid rgba(0, 0, 0, 0.08);
-}
-
-.calc-btn:hover {
-    background: rgba(0, 0, 0, 0.08);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-.calc-btn:active {
-    transform: translateY(0) scale(0.98);
-}
-
-.calc-btn.operator {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.2));
-    color: white;
-}
-
-.calc-btn.operator:hover {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(99, 102, 241, 0.3));
-}
-
 .terminal-content {
     background: rgba(0, 0, 0, 0.05);
     font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
@@ -864,12 +829,183 @@ body {
     background: linear-gradient(45deg, #ff6b6b 0%, #4ecdc4 100%);
 }
 
+/* Notification Badge */
+.notification-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: linear-gradient(135deg, #ff3b30 0%, #ff6b6b 100%);
+    color: white;
+    border-radius: 50%;
+    min-width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0 5px;
+    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.8);
+    animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+.notification-badge.hidden {
+    display: none;
+}
+
+/* Mailbox Tabs */
+.mailbox-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    margin-bottom: 16px;
+}
+
+.mailbox-tab {
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    color: rgba(0, 0, 0, 0.6);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.mailbox-tab:hover {
+    color: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.mailbox-tab.active {
+    color: #0066cc;
+    border-bottom-color: #0066cc;
+}
+
+.mailbox-tab .tab-badge {
+    display: inline-block;
+    margin-left: 6px;
+    background: #ff3b30;
+    color: white;
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* Task List Styles */
+.task-item {
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+}
+
+.task-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+.task-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.task-status.scheduled {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+}
+
+.task-status.processing {
+    background: rgba(251, 146, 60, 0.1);
+    color: #fb923c;
+}
+
+.task-status.completed {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+}
+
+.task-status.failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+/* Scheduled Processes Tabs */
+.scheduled-processes-tabs {
+    display: flex;
+    gap: 8px;
+    padding-bottom: 8px;
+}
+
+.scheduled-processes-tab {
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.scheduled-processes-tab:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.scheduled-processes-tab.active {
+    color: #a78bfa;
+    border-bottom-color: #a78bfa;
+}
+
+.notification-item {
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+}
+
+.notification-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+.notification-item.unread {
+    background: rgba(0, 102, 204, 0.05);
+    border-color: rgba(0, 102, 204, 0.2);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     :root {
         --sidebar-width: 100%;
     }
-    
+
     .window {
         min-width: 100%;
         min-height: 100%;

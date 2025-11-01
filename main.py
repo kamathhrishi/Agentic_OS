@@ -6,7 +6,7 @@ import os
 import uvicorn
 from pathlib import Path
 from pydantic import BaseModel
-from typing import List, Optional, AsyncGenerator, Tuple, Dict, Any
+from typing import List, Optional, AsyncGenerator
 import json
 import asyncio
 import logging
@@ -17,11 +17,6 @@ import httpx
 import base64 as b64
 from voice_agent import initialize_voice_agent, get_voice_agent, VoiceConfig
 from slide_templates import HTML_TEMPLATE, SLIDE_TEMPLATES, create_slide_content
-from hyperspell_integration import (
-    get_hyperspell_client,
-    format_memories_for_prompt,
-    HyperspellMemory,
-)
 from datetime import datetime
 from playwright.async_api import async_playwright, Browser, Page
 import base64
@@ -54,15 +49,6 @@ if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY not found in .env file. Please create a .env file with your OpenAI API key.")
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
-
-# Hyperspell integration toggle
-HYPERSPELL_API_KEY = os.getenv("HYPERSPELL_API_KEY", "").strip()
-HYPERSPELL_ENABLED = bool(HYPERSPELL_API_KEY)
-
-if HYPERSPELL_ENABLED:
-    logger.info("Hyperspell integration enabled; context-aware responses will include Notion and calendar data." )
-else:
-    logger.info("Hyperspell integration disabled; set HYPERSPELL_API_KEY to enable contextual sync.")
 
 # Initialize Voice Agent for STT → LLM → TTS pipeline
 voice_config = VoiceConfig(
@@ -118,6 +104,48 @@ browser_contexts = {}  # Store browser contexts per session
 browser_agents = {}  # Format: {session_id: {"tasks": deque([...]), "status": "active/idle/thinking", "current_goal": "", "logs": [], "agent_task": None}}
 agent_task_registry = {}  # Track running agent tasks
 
+# Email monitoring for command emails
+processed_email_ids = set()  # Track which email IDs we've already processed
+email_monitor_task = None  # Background task reference
+email_notifications = []  # Store notifications for all new emails (both regular and command)
+archived_processes = []  # Store completed/archived processes for history
+
+# Inbox cache for faster loading
+inbox_cache = {
+    "emails": [],
+    "last_updated": None,
+    "received_count": 0,
+    "sent_count": 0
+}
+inbox_cache_lock = asyncio.Lock()  # Lock for thread-safe cache updates
+
+# File to persist processed email IDs across server restarts
+PROCESSED_EMAILS_FILE = Path("processed_email_ids.json")
+
+def save_processed_email_ids():
+    """Save processed email IDs to file for persistence across restarts"""
+    try:
+        with open(PROCESSED_EMAILS_FILE, 'w') as f:
+            json.dump(list(processed_email_ids), f)
+        logger.debug(f"💾 Saved {len(processed_email_ids)} processed email IDs to file")
+    except Exception as e:
+        logger.error(f"Error saving processed email IDs: {str(e)}", exc_info=True)
+
+def load_processed_email_ids():
+    """Load processed email IDs from file"""
+    global processed_email_ids
+    try:
+        if PROCESSED_EMAILS_FILE.exists():
+            with open(PROCESSED_EMAILS_FILE, 'r') as f:
+                email_ids = json.load(f)
+                processed_email_ids = set(email_ids)
+            logger.info(f"📂 Loaded {len(processed_email_ids)} processed email IDs from file")
+        else:
+            logger.info("📂 No processed email IDs file found, starting fresh")
+    except Exception as e:
+        logger.error(f"Error loading processed email IDs: {str(e)}", exc_info=True)
+        processed_email_ids = set()
+
 def get_conversation_history(session_id: str, max_pairs: int = 4):
     """Get conversation history for a session, limited to last max_pairs user-assistant pairs"""
     if session_id not in conversation_history:
@@ -140,146 +168,6 @@ def add_to_conversation_history(session_id: str, user_message: str, assistant_re
     max_messages = 4 * 2  # 4 pairs * 2 messages per pair
     if len(conversation_history[session_id]) > max_messages:
         conversation_history[session_id] = conversation_history[session_id][-max_messages:]
-
-
-# Hyperspell context helpers
-HYPERSPELL_CALENDAR_KEYWORDS = {
-    "calendar",
-    "schedule",
-    "meeting",
-    "meetings",
-    "appointments",
-    "appointment",
-    "availability",
-    "event",
-    "events",
-    "reminder",
-    "reminders",
-}
-
-HYPERSPELL_NOTION_KEYWORDS = {
-    "notion",
-    "workspace",
-    "wiki",
-    "knowledge base",
-    "knowledgebase",
-    "notes",
-    "note",
-    "docs",
-    "document",
-    "documents",
-    "page",
-    "pages",
-    "database",
-    "roadmap",
-    "spec",
-    "specs",
-    "project plan",
-}
-
-
-def detect_hyperspell_sources(
-    user_message: str,
-    recent_history: Optional[List[Dict[str, str]]] = None,
-) -> List[str]:
-    """Determine which Hyperspell sources should be queried for a request."""
-
-    search_targets = [user_message]
-
-    if recent_history:
-        # Inspect the two most recent user messages to capture follow-ups like "what about tomorrow?"
-        user_turns = [msg.get("content", "") for msg in recent_history if msg.get("role") == "user"]
-        for content in reversed(user_turns[-2:]):
-            search_targets.append(content)
-
-    sources: List[str] = []
-    for text in search_targets:
-        lowered = text.lower()
-        if any(keyword in lowered for keyword in HYPERSPELL_CALENDAR_KEYWORDS):
-            if "calendar" not in sources:
-                sources.append("calendar")
-        if any(keyword in lowered for keyword in HYPERSPELL_NOTION_KEYWORDS):
-            if "notion" not in sources:
-                sources.append("notion")
-
-    return sources
-
-
-async def fetch_hyperspell_context(
-    session_id: str,
-    user_message: str,
-    sources: List[str],
-    *,
-    limit: int = 5,
-) -> List[HyperspellMemory]:
-    """Fetch context from Hyperspell if integration is enabled."""
-
-    if not (HYPERSPELL_ENABLED and sources):
-        return []
-
-    client = get_hyperspell_client()
-    if not client.is_configured:
-        return []
-
-    return await client.fetch_context(
-        session_id,
-        user_message,
-        sources=sources,
-        limit=limit,
-    )
-
-
-def schedule_hyperspell_record(
-    session_id: str,
-    user_message: str,
-    assistant_message: str,
-    *,
-    sources: Optional[List[str]] = None,
-    context_used: Optional[List[HyperspellMemory]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-) -> None:
-    """Record the turn with Hyperspell without blocking the response."""
-
-    if not HYPERSPELL_ENABLED:
-        return
-
-    client = get_hyperspell_client()
-    if not client.supports_recording:
-        return
-
-    payload_metadata: Dict[str, Any] = {}
-    if metadata:
-        payload_metadata.update(metadata)
-    if sources:
-        payload_metadata.setdefault("sources", sources)
-    if context_used:
-        payload_metadata["context_used"] = [
-            {
-                "source": memory.source,
-                "title": memory.title,
-                "url": memory.url,
-                "timestamp": memory.timestamp,
-            }
-            for memory in context_used
-        ]
-
-    async def _record():
-        try:
-            await client.record_interaction(
-                session_id,
-                user_message=user_message,
-                assistant_message=assistant_message,
-                sources=sources,
-                metadata=payload_metadata or None,
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Failed to record interaction with Hyperspell: %s", exc)
-
-    try:
-        asyncio.create_task(_record())
-    except RuntimeError:
-        # Fallback: run synchronously as last resort
-        asyncio.run(_record())
 
 # Pydantic models
 class FileContent(BaseModel):
@@ -346,6 +234,643 @@ def get_available_files():
                 "path": rel_path.replace(os.sep, "/")
             })
     return files
+
+async def process_chat_message(user_message: str, session_id: str = "default", skip_streaming: bool = False):
+    """
+    Core chat message processing function that can be called directly without HTTP.
+    Processes the message, executes actions, and returns the response.
+    
+    Args:
+        user_message: The user's message/command
+        session_id: Session ID for conversation history
+        skip_streaming: If True, will not use streaming workflows (useful for background tasks)
+    
+    Returns:
+        dict with keys: response, action, data (matching chat endpoint format)
+    """
+    original_user_message = user_message
+    
+    if not user_message:
+        return {
+            "response": "Please enter a command.",
+            "action": None,
+            "data": None
+        }
+    
+    user_lower = user_message.lower().strip()
+    
+    # Check conversation history for context
+    recent_history = get_conversation_history(session_id, max_pairs=2)
+    has_recent_find = any(
+        msg.get("role") == "assistant" and 
+        (msg.get("content", "").lower().find("found") >= 0 or 
+         msg.get("content", "").lower().find("searching") >= 0 or
+         "find_file" in str(msg))
+        for msg in recent_history
+    )
+    
+    compilation_keywords = [
+        "compile", "create a report", "generate a report", "make a report", "make report",
+        "analyze and create", "summarize", "create a summary", "generate a summary",
+        "report of", "report from", "report on", "compile from", "compile all",
+        "gather and compile", "collect and summarize", "report of it", "compile it",
+        "make a report of", "create a report of", "summarize it", "compile them"
+    ]
+    
+    has_explicit_keyword = any(keyword in user_lower for keyword in compilation_keywords)
+    has_report_pattern = (
+        ("report" in user_lower and ("of" in user_lower or "from" in user_lower or "on" in user_lower)) or
+        ("make" in user_lower and "report" in user_lower) or
+        ("compile" in user_lower and ("it" in user_lower or "them" in user_lower or "all" in user_lower)) or
+        ("summarize" in user_lower and ("it" in user_lower or "them" in user_lower))
+    )
+    has_report_keyword = any(kw in user_lower for kw in ["report", "compile", "summarize", "summary"])
+    has_document_trigger = any(trig in user_lower for trig in ["documents", "files", "it", "them", "those", "all"])
+    is_compilation_request = has_explicit_keyword or has_report_pattern or (has_report_keyword and (has_document_trigger or has_recent_find))
+    
+    # For background tasks, we'll handle compilation/slideshow requests differently
+    # Instead of streaming, we'll execute them directly
+    if not skip_streaming and is_compilation_request:
+        # Return a special indicator that streaming is needed
+        # For email commands, we'll skip this and process normally
+        pass
+    
+    import re
+    slideshow_keywords = ["create.*slideshow", "make.*presentation", "generate.*slideshow", "create.*presentation", "build.*presentation"]
+    is_slideshow_request = any(re.search(keyword.replace("*", ".*"), user_lower) for keyword in slideshow_keywords)
+    
+    # Skip streaming workflows for background email commands
+    if not skip_streaming and is_slideshow_request:
+        pass
+    
+    # Get current file list to help LLM understand available files
+    available_files = get_available_files()
+    files_context = "\n".join([f"- {f['path']}" for f in available_files[:20]])
+    
+    # System prompt (same as chat endpoint)
+    system_prompt = """You are a helpful and friendly OS assistant that can engage in natural conversation AND help users control their operating system through natural language.
+
+You can have casual conversations with users - answer questions, provide explanations, chat about topics, etc. You're warm, intelligent, and engaging.
+
+When users want to perform actions on the system, you can execute the following:
+1. open_app - Open applications (file_manager, terminal, notepad, settings, mailbox, browser, slideshow)
+   - You can open multiple browser windows simultaneously by calling open_app with "browser" multiple times
+   - Each browser window operates independently and can navigate to different URLs
+2. close_all - Close all windows
+3. close_window - Close the topmost window
+4. minimize_window - Minimize the topmost window
+5. maximize_window - Maximize the topmost window
+6. create_file - Create a new file (path and content required)
+7. find_file - Find files by name pattern OR search within file contents (searches both in parallel)
+8. read_files - Read one or more files and return their contents (paths array required). Use this to retrieve document contents before compiling reports.
+9. delete_file - Delete a file by path
+10. list_files - List files in a directory
+11. compose_email - Compose and send an email using AI (instructions required)
+   - Supports sending to multiple recipients - include all email addresses in the instructions
+   - Format multiple recipients as: "Send an email to email1@example.com, email2@example.com, and email3@example.com about..."
+   - The instructions should clearly list all recipient email addresses, subject, and message content
+   - Can include file contents in emails - first use read_files to retrieve file content, then include it in the email instructions
+   - When user asks to send a file via email, first read the file using read_files, then include the content in the compose_email instructions
+   - Can search, summarize, and send: When user asks to search for files, summarize them, and email the summary - first use find_file to search, then read_files to get content, analyze and summarize the content, then include the summary in compose_email instructions
+12. navigate_browser - Navigate browser to a URL (url required) OR multiple URLs (urls as array required)
+   - For single URL: {"url": "example.com"} - Opens one browser window
+   - For multiple URLs: {"urls": ["google.com", "youtube.com"]} - Opens multiple browser windows simultaneously
+   - IMPORTANT: When user requests multiple sites at once (e.g., "open google.com and youtube.com"), use the multiple URLs format with "urls" array in the data field
+   - Each URL gets its own independent browser window
+13. control_browser - Control browser actions using natural language (command required, session_id optional)
+   - ONLY use this when user EXPLICITLY requests browser interaction or when a task REQUIRES it
+   - Examples of when to use: "click the login button", "fill out this form", "search for something", "click on X", "type Y in the search box", "scroll down"
+   - DO NOT use for simple navigation - use navigate_browser instead
+   - The system will analyze the current page screenshot using AI vision and execute the action
+   - Format: {"command": "natural language instruction", "session_id": "optional browser session"}
+   - If no session_id provided, uses the most recently active browser window
+   - IMPORTANT: Only use control_browser when the user explicitly asks for interaction OR when completing a task that requires page interaction
+
+For file operations, always work within the data directory. Paths should be relative (e.g., "Desktop/myfile.txt" or "myfile.txt").
+When creating files, if no path prefix is specified, create them in Desktop folder.
+
+The find_file operation searches both filenames and file contents in parallel for fast results.
+Use it like: "find recipes" (will search both filenames and contents), "find files containing chocolate", etc.
+
+DOCUMENT RETRIEVAL AND REPORT COMPILATION:
+When users ask to compile reports, analyze documents, or create summaries from multiple files:
+1. First use find_file to locate relevant documents (e.g., "find financial reports", "find Q4 documents")
+2. Then use read_files with the file paths found to retrieve their contents
+3. Analyze the retrieved content and use create_file to compile a comprehensive report
+4. The read_files action accepts an array of file paths and returns the full content of each file, which you can then synthesize into reports, summaries, or analyses.
+
+Example workflow for "Compile a Q4 financial report":
+- Step 1: find_file with pattern "Q4 financial" or "Q4 2024"
+- Step 2: The system will return found file paths in the response. In the next turn, use read_files with the paths from step 1
+- Step 3: After reading files, their contents will be in the conversation history. Use create_file to compile a comprehensive report synthesizing all the information
+
+ITERATIVE WORKFLOW SUPPORT:
+The system now supports automatic iterative workflows for document retrieval and report compilation. When users request:
+- "Compile a [topic] report"
+- "Create a summary of [documents]"
+- "Analyze [documents] and create a report"
+
+The system will automatically:
+1. Find relevant documents using find_file
+2. Read their contents using read_files
+3. Compile a comprehensive report using create_file
+
+You can also manually chain these actions across multiple turns using conversation history.
+
+EMAIL WITH FILE CONTENT:
+When users ask to send a file via email or include file content in an email:
+1. First use read_files to retrieve the file content (provide the file path)
+2. Then use compose_email with instructions that include the file content
+3. In the email instructions, explicitly include the file content and specify how it should be presented (e.g., "Include the following content:", "Attach the content from the file:", or "The email body should contain:")
+4. The file content will be included in the email body based on your instructions
+
+Example workflow for "Send the contents of report.txt to john@example.com":
+- Step 1: read_files with path "Desktop/report.txt" (or find the exact path first using find_file)
+- Step 2: After reading the file, use compose_email with instructions like: "Send an email to john@example.com with subject 'Report'. Include the following content from report.txt: [paste the file content here]"
+
+When the user asks to "send file X as email" or "email the contents of file Y", automatically:
+1. First find/read the file to get its content
+2. Then compose the email including that content in the instructions
+
+SEARCH, SUMMARIZE, AND SEND VIA EMAIL:
+When users ask to search for files, summarize them, and send the summary via email:
+1. First use find_file to locate relevant documents (e.g., "find financial reports", "find Q4 documents")
+2. Then use read_files to retrieve the file contents
+3. Analyze and summarize the content (you can summarize in your response or include a summary in the email instructions)
+4. Use compose_email with instructions that include a concise summary of the file content
+
+Example workflow for "Search for Q4 reports, summarize them, and email the summary to john@example.com":
+- Step 1: find_file with pattern "Q4" or "Q4 financial" to locate relevant documents
+- Step 2: read_files with the paths found in step 1
+- Step 3: After reading, analyze the content and create a summary, then use compose_email with instructions like: "Send an email to john@example.com with subject 'Q4 Reports Summary'. The email body should contain a concise summary of the Q4 financial reports. Summary: [your summary of the key points, metrics, and insights from the reports]"
+
+When the user asks to "search for X, summarize it, and send it via email" or "find documents about Y and email a summary":
+1. First search using find_file
+2. Read the files using read_files
+3. Summarize the content (focus on key points, main findings, important metrics, etc.)
+4. Compose an email with the summary included in the instructions
+
+BROWSER USAGE GUIDELINES:
+- Use navigate_browser for simple navigation (opening URLs, visiting sites)
+- Use control_browser ONLY when:
+  1. User EXPLICITLY requests interaction ("click X", "type Y", "scroll", "fill out form")
+  2. A task REQUIRES page interaction to complete (e.g., "search for X", "find out about Y", "login to site", "submit form")
+  3. User wants to find information ("find out about", "search for", "look up", "get information on") - this REQUIRES interaction
+- DO NOT use control_browser for simple navigation tasks (just opening a URL)
+- IMPORTANT: When user says "find out about X" or "search for Y":
+  * This is a TASK that REQUIRES interaction, so use control_browser
+  * OR use navigate_browser first, then control_browser to perform the search
+- If user explicitly says "find out about A, B, and C in separate browsers":
+  * Open multiple browsers (navigate_browser with multiple URLs)
+  * The system will automatically perform searches in each browser (you don't need to chain actions)
+
+Available files in the system:
+""" + files_context + """
+
+RESPONSE FORMAT - You must ALWAYS respond with ONLY a valid JSON object with this exact structure:
+
+{
+  "response": "string - Your conversational response to the user OR a helpful message explaining what action you took. Be natural and friendly.",
+  "action": "string or null - Action name to perform, or null if just conversational. Must be one of: open_app, close_all, close_window, minimize_window, maximize_window, create_file, find_file, read_files, delete_file, list_files, compose_email, navigate_browser, control_browser, or null",
+  "data": {
+    // Action-specific data. Use empty object {} for conversational messages or when action is null.
+    // For open_app: {"app": "string (required): file_manager, terminal, notepad, settings, mailbox, browser, or slideshow", "title": "string (optional): Window title"}
+    // For create_file: {"path": "string (required): File path", "content": "string (required): File content"}
+    // For delete_file: {"path": "string (required): File path to delete"}
+    // For list_files: {"path": "string (required): Directory path to list"}
+    // For find_file: {"pattern": "string (required): Search pattern", "search_content": "boolean (optional, defaults to true): Whether to search in file contents"}
+    // For read_files: {"paths": "array of strings (required): Array of file paths to read. Returns full content of each file."}
+    // For compose_email: {"instructions": "string (required): Natural language instructions describing the email to compose and send, including recipient email address(es) - can be single or multiple (comma-separated), subject matter, and any specific requirements. For multiple recipients, include all email addresses in the instructions like: 'Send an email to john@example.com, jane@example.com, and bob@example.com about...'. To include file content in the email, first use read_files to get the content, then include it in the instructions like: 'Send an email to recipient@example.com with subject X. Include the following content from the file: [paste file content here]'"}
+    // For navigate_browser: 
+    //   Single URL: {"url": "string (required): URL to navigate to (e.g., 'https://example.com' or 'example.com')"}
+    //   Multiple URLs: {"urls": ["array of strings (required): Multiple URLs to open simultaneously, each in its own browser window"]}
+    // For control_browser: {"command": "string (required): Natural language instruction for browser interaction (e.g., 'click the search button', 'type hello in the search box', 'scroll down')", "session_id": "string (optional): Browser session ID"}
+    // For other actions: {} (empty object)
+  }
+}
+
+IMPORTANT: 
+- Always return ONLY the JSON object, no other text before or after
+- For conversational messages (no action needed), set "action" to null and "data" to {}
+- Ensure all JSON is valid and properly formatted
+- The "response" field is always required and must be a string
+- The "action" field is always required and must be a string (one of the valid actions) or null
+- The "data" field is always required and must be an object (empty {} for conversational messages)"""
+
+    # Valid action names
+    valid_actions = ["open_app", "close_all", "close_window", "minimize_window", "maximize_window", 
+                     "create_file", "find_file", "read_files", "delete_file", "list_files", "compose_email", "navigate_browser", "control_browser"]
+    
+    def validate_response(response_dict):
+        """Validate the LLM response structure and action"""
+        if not isinstance(response_dict, dict):
+            return False, "Response is not a dictionary"
+        
+        if "response" not in response_dict or not isinstance(response_dict["response"], str):
+            return False, "Missing or invalid 'response' field"
+        
+        if "action" not in response_dict:
+            return False, "Missing 'action' field"
+        
+        if "data" not in response_dict or not isinstance(response_dict["data"], dict):
+            return False, "Missing or invalid 'data' field"
+        
+        action = response_dict.get("action")
+        if action is not None:
+            if not isinstance(action, str) or action not in valid_actions:
+                return False, f"Invalid action: {action}. Must be one of {valid_actions} or null"
+        
+        return True, "Valid"
+    
+    try:
+        # Retry logic - up to 3 attempts
+        max_retries = 3
+        llm_response = None
+        raw_response = None
+        
+        # Get conversation history (last 4 pairs = 8 messages)
+        history_messages = get_conversation_history(session_id, max_pairs=4)
+        
+        # Build messages array with system prompt, history, and current user message
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history_messages)
+        messages.append({"role": "user", "content": user_message})
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Call OpenAI API
+                completion = openai_client.chat.completions.create(
+                    model="gpt-4.1-2025-04-14",
+                    messages=messages,
+                    temperature=0.7,
+                    response_format={"type": "json_object"}
+                )
+                
+                raw_response = completion.choices[0].message.content
+                
+                # Parse the JSON response
+                try:
+                    llm_response = json.loads(raw_response)
+                except json.JSONDecodeError as e:
+                    if attempt < max_retries:
+                        continue
+                    else:
+                        raise Exception(f"Failed to parse JSON after {max_retries} attempts: {str(e)}")
+                
+                # Validate response structure and action
+                is_valid, validation_msg = validate_response(llm_response)
+                if not is_valid:
+                    if attempt < max_retries:
+                        continue
+                    else:
+                        llm_response = {
+                            "response": f"I encountered an error processing your request after {max_retries} attempts. Please try rephrasing your request.",
+                            "action": None,
+                            "data": {}
+                        }
+                        break
+                
+                break
+            
+            except Exception as e:
+                if attempt < max_retries:
+                    continue
+                else:
+                    raise Exception(f"Failed after {max_retries} attempts: {str(e)}")
+        
+        if llm_response is None:
+            llm_response = {
+                "response": "I encountered an error processing your request. Please try again.",
+                "action": None,
+                "data": {}
+            }
+        
+        # Execute file operations if needed (same logic as chat endpoint)
+        action = llm_response.get("action")
+        action_data = llm_response.get("data", {})
+        
+        # Execute actions - import the execute_action helper from chat endpoint logic
+        # We'll execute actions inline here (same logic as chat endpoint)
+        # Note: For background tasks, we skip UI actions like open_app, close_window, etc.
+        
+        if action == "create_file":
+            try:
+                file_path = action_data.get("path", "")
+                file_content = action_data.get("content", "")
+                
+                if not file_path:
+                    llm_response["response"] = "Error: No file path specified for file creation."
+                    llm_response["action"] = None
+                else:
+                    safe_path = Path(file_path)
+                    if ".." in str(safe_path) or safe_path.is_absolute():
+                        llm_response["response"] = "Error: Invalid file path."
+                        llm_response["action"] = None
+                    else:
+                        if not str(safe_path).startswith("Desktop/"):
+                            safe_path = Path("Desktop") / safe_path
+                        
+                        target_file = DATA_DIR / safe_path
+                        
+                        if target_file.exists():
+                            llm_response["response"] = f"Error: File '{safe_path}' already exists."
+                            llm_response["action"] = None
+                        else:
+                            target_file.parent.mkdir(parents=True, exist_ok=True)
+                            target_file.write_text(file_content, encoding='utf-8')
+                            llm_response["response"] = f"Successfully created file '{safe_path}'."
+            except Exception as e:
+                llm_response["response"] = f"Error creating file: {str(e)}"
+                llm_response["action"] = None
+        
+        elif action == "find_file":
+            try:
+                pattern = action_data.get("pattern", "")
+                search_in_content = action_data.get("search_content", True)
+                
+                if not pattern:
+                    llm_response["response"] = "Error: No search pattern specified."
+                    llm_response["action"] = None
+                else:
+                    all_files = []
+                    for root, dirs, filenames in os.walk(DATA_DIR):
+                        for filename in filenames:
+                            full_path = os.path.join(root, filename)
+                            rel_path = os.path.relpath(full_path, DATA_DIR)
+                            all_files.append({
+                                "path": rel_path.replace(os.sep, "/"),
+                                "full_path": full_path
+                            })
+                    
+                    found_files_by_name = []
+                    found_files_by_content = []
+                    
+                    pattern_lower = pattern.lower()
+                    pattern_words = pattern_lower.split()
+                    
+                    for file_info in all_files:
+                        path_lower = file_info["path"].lower()
+                        if pattern_lower in path_lower or (len(pattern_words) > 1 and all(word in path_lower for word in pattern_words)):
+                            found_files_by_name.append({
+                                "path": file_info["path"],
+                                "match_type": "filename"
+                            })
+                    
+                    if search_in_content:
+                        def search_file_content(file_info):
+                            try:
+                                with open(file_info["full_path"], 'r', encoding='utf-8', errors='ignore') as f:
+                                    content = f.read()
+                                    content_lower = content.lower()
+                                    matches_pattern = pattern_lower in content_lower
+                                    matches_words = len(pattern_words) > 1 and all(word in content_lower for word in pattern_words)
+                                    if matches_pattern or matches_words:
+                                        lines = content.split('\n')
+                                        matching_lines = []
+                                        for i, line in enumerate(lines, 1):
+                                            line_lower = line.lower()
+                                            if pattern_lower in line_lower or (len(pattern_words) > 1 and all(word in line_lower for word in pattern_words)):
+                                                matching_lines.append(i)
+                                        return {
+                                            "path": file_info["path"],
+                                            "match_type": "content",
+                                            "line_count": len(matching_lines),
+                                            "sample_lines": matching_lines[:3]
+                                        }
+                            except Exception:
+                                pass
+                            return None
+                        
+                        found_filename_paths = {f["path"] for f in found_files_by_name}
+                        with ThreadPoolExecutor(max_workers=10) as executor:
+                            futures = {executor.submit(search_file_content, file_info): file_info 
+                                      for file_info in all_files 
+                                      if file_info["path"] not in found_filename_paths}
+                            
+                            for future in as_completed(futures):
+                                result = future.result()
+                                if result:
+                                    found_files_by_content.append(result)
+                    
+                    found_files = found_files_by_name.copy()
+                    found_files_by_content_paths = {f["path"] for f in found_files_by_name}
+                    
+                    for content_match in found_files_by_content:
+                        if content_match["path"] not in found_files_by_content_paths:
+                            found_files.append(content_match)
+                    
+                    if found_files:
+                        results_text = []
+                        for f in found_files[:15]:
+                            if f["match_type"] == "filename":
+                                results_text.append(f"- {f['path']} (filename match)")
+                            else:
+                                line_info = f" (found in content at lines {', '.join(map(str, f.get('sample_lines', [])))}" + \
+                                          (f", and {f.get('line_count', 0) - len(f.get('sample_lines', []))} more" 
+                                           if f.get('line_count', 0) > len(f.get('sample_lines', [])) else "") + ")"
+                                results_text.append(f"- {f['path']}{line_info}")
+                        
+                        files_list = "\n".join(results_text)
+                        total_count = len(found_files)
+                        llm_response["response"] = f"Found {total_count} file(s) matching '{pattern}':\n{files_list}"
+                        llm_response["data"] = {
+                            "files": [f["path"] for f in found_files[:15]],
+                            "details": found_files[:15]
+                        }
+                    else:
+                        llm_response["response"] = f"No files found matching '{pattern}' in filename or content."
+                        llm_response["data"] = {"files": [], "details": []}
+            except Exception as e:
+                llm_response["response"] = f"Error finding files: {str(e)}"
+                llm_response["action"] = None
+        
+        elif action == "read_files":
+            try:
+                file_paths = action_data.get("paths", [])
+                if not file_paths or not isinstance(file_paths, list):
+                    llm_response["response"] = "Error: No file paths specified or paths must be an array."
+                    llm_response["action"] = None
+                else:
+                    file_contents = []
+                    errors = []
+                    
+                    for file_path in file_paths:
+                        try:
+                            safe_path = Path(file_path)
+                            if ".." in str(safe_path) or safe_path.is_absolute():
+                                errors.append(f"Invalid path: {file_path}")
+                                continue
+                            
+                            target_file = DATA_DIR / safe_path
+                            
+                            if not target_file.exists() or not target_file.is_file():
+                                errors.append(f"File not found: {file_path}")
+                                continue
+                            
+                            content = target_file.read_text(encoding='utf-8', errors='ignore')
+                            file_contents.append({
+                                "path": file_path,
+                                "content": content,
+                                "size": len(content),
+                                "lines": len(content.split('\n'))
+                            })
+                        except Exception as e:
+                            errors.append(f"Error reading {file_path}: {str(e)}")
+                    
+                    if file_contents:
+                        response_parts = [f"Successfully read {len(file_contents)} file(s):"]
+                        for fc in file_contents:
+                            response_parts.append(f"\n--- {fc['path']} ({fc['lines']} lines, {fc['size']} chars) ---")
+                            response_parts.append(fc['content'])
+                        
+                        if errors:
+                            response_parts.append(f"\n\nErrors: {', '.join(errors)}")
+                        
+                        llm_response["response"] = "\n".join(response_parts)
+                        llm_response["data"] = {
+                            "files": file_contents,
+                            "errors": errors
+                        }
+                    else:
+                        llm_response["response"] = f"No files could be read. Errors: {', '.join(errors) if errors else 'All files were invalid or not found.'}"
+                        llm_response["data"] = {"files": [], "errors": errors}
+            except Exception as e:
+                llm_response["response"] = f"Error reading files: {str(e)}"
+                llm_response["action"] = None
+        
+        elif action == "compose_email":
+            instructions = action_data.get("instructions", "")
+            if not instructions:
+                llm_response["response"] = "Error: No email instructions provided."
+                llm_response["action"] = None
+            else:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        RAILWAY_EMAIL_API,
+                        json={"instructions": instructions},
+                        headers={"Content-Type": "application/json"}
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    email_entry = {
+                        "id": result.get("agentmail_message_id", f"email_{len(email_inbox)}"),
+                        "message_id": result.get("agentmail_message_id"),
+                        "to": result.get("email", {}).get("to", ""),
+                        "subject": result.get("email", {}).get("subject", ""),
+                        "body": result.get("email", {}).get("body", ""),
+                        "status": result.get("status", "sent"),
+                        "timestamp": datetime.now().isoformat(),
+                        "sent": True
+                    }
+                    email_inbox.insert(0, email_entry)
+                    
+                    recipient = email_entry.get("to", "recipient")
+                    subject = email_entry.get("subject", "email")
+                    
+                    # Format recipient(s) nicely for response
+                    recipients_str = recipient
+                    if isinstance(recipient, str) and ',' in recipient:
+                        # Multiple recipients - format as list
+                        recipients = [r.strip() for r in recipient.split(',')]
+                        if len(recipients) == 2:
+                            recipients_str = f"{recipients[0]} and {recipients[1]}"
+                        else:
+                            recipients_str = ", ".join(recipients[:-1]) + f", and {recipients[-1]}"
+                    
+                    llm_response["response"] = f"Email sent successfully to {recipients_str}!\nSubject: {subject}\nThe email has been added to your inbox."
+                    llm_response["data"] = {"email": email_entry}
+        
+        # Skip UI actions for background email commands (open_app, close_window, etc.)
+        # These don't make sense in background context
+        elif action in ["open_app", "close_all", "close_window", "minimize_window", "maximize_window"]:
+            llm_response["response"] = f"Action '{action}' is not available for background email commands. UI actions are only available through the chat interface."
+            llm_response["action"] = None
+        
+        elif action in ["navigate_browser", "control_browser"]:
+            llm_response["response"] = f"Browser actions are not available for background email commands. Browser automation is only available through the chat interface."
+            llm_response["action"] = None
+        
+        elif action == "delete_file":
+            try:
+                file_path = action_data.get("path", "")
+                if not file_path:
+                    llm_response["response"] = "Error: No file path specified for deletion."
+                    llm_response["action"] = None
+                else:
+                    safe_path = Path(file_path)
+                    if ".." in str(safe_path) or safe_path.is_absolute():
+                        llm_response["response"] = "Error: Invalid file path."
+                        llm_response["action"] = None
+                    else:
+                        target_file = DATA_DIR / safe_path
+                        
+                        if not target_file.exists():
+                            llm_response["response"] = f"Error: File '{safe_path}' not found."
+                            llm_response["action"] = None
+                        else:
+                            if target_file.is_file():
+                                target_file.unlink()
+                            else:
+                                import shutil
+                                shutil.rmtree(target_file)
+                            llm_response["response"] = f"Successfully deleted '{safe_path}'."
+            except Exception as e:
+                llm_response["response"] = f"Error deleting file: {str(e)}"
+                llm_response["action"] = None
+        
+        elif action == "list_files":
+            try:
+                list_path = action_data.get("path", "")
+                if list_path:
+                    safe_path = Path(list_path).name
+                    target_dir = DATA_DIR / safe_path
+                else:
+                    target_dir = DATA_DIR
+                
+                if not target_dir.exists() or not target_dir.is_dir():
+                    llm_response["response"] = f"Error: Directory '{list_path}' not found."
+                    llm_response["action"] = None
+                else:
+                    items = []
+                    for item in sorted(target_dir.iterdir()):
+                        items.append({
+                            "name": item.name,
+                            "path": str(item.relative_to(DATA_DIR)),
+                            "type": "folder" if item.is_dir() else "file"
+                        })
+                    
+                    if items:
+                        items_list = "\n".join([f"- {item['name']} ({item['type']})" for item in items[:20]])
+                        llm_response["response"] = f"Files in '{list_path or 'root'}':\n{items_list}"
+                        llm_response["data"] = {"items": items[:20]}
+                    else:
+                        llm_response["response"] = f"Directory '{list_path or 'root'}' is empty."
+                        llm_response["data"] = {"items": []}
+            except Exception as e:
+                llm_response["response"] = f"Error listing files: {str(e)}"
+                llm_response["action"] = None
+        
+        # Store conversation history
+        if session_id not in conversation_history:
+            conversation_history[session_id] = []
+        
+        conversation_history[session_id].append({"role": "user", "content": user_message})
+        conversation_history[session_id].append({"role": "assistant", "content": llm_response.get("response", "")})
+        
+        # Keep only last 20 messages per session
+        if len(conversation_history[session_id]) > 20:
+            conversation_history[session_id] = conversation_history[session_id][-20:]
+        
+        return llm_response
+        
+    except Exception as e:
+        logger.error(f"Error in process_chat_message: {str(e)}", exc_info=True)
+        return {
+            "response": f"I encountered an error: {str(e)}",
+            "action": None,
+            "data": {}
+        }
 
 @app.post("/api/chat")
 async def chat_endpoint(request: Request):
@@ -465,7 +990,7 @@ async def chat_endpoint(request: Request):
 You can have casual conversations with users - answer questions, provide explanations, chat about topics, etc. You're warm, intelligent, and engaging.
 
 When users want to perform actions on the system, you can execute the following:
-1. open_app - Open applications (file_manager, terminal, calculator, notepad, settings, mailbox, browser, slideshow)
+1. open_app - Open applications (file_manager, terminal, notepad, settings, mailbox, browser, slideshow)
    - You can open multiple browser windows simultaneously by calling open_app with "browser" multiple times
    - Each browser window operates independently and can navigate to different URLs
 2. close_all - Close all windows
@@ -478,6 +1003,12 @@ When users want to perform actions on the system, you can execute the following:
 9. delete_file - Delete a file by path
 10. list_files - List files in a directory
 11. compose_email - Compose and send an email using AI (instructions required)
+   - Supports sending to multiple recipients - include all email addresses in the instructions
+   - Format multiple recipients as: "Send an email to email1@example.com, email2@example.com, and email3@example.com about..."
+   - The instructions should clearly list all recipient email addresses, subject, and message content
+   - Can include file contents in emails - first use read_files to retrieve file content, then include it in the email instructions
+   - When user asks to send a file via email, first read the file using read_files, then include the content in the compose_email instructions
+   - Can search, summarize, and send: When user asks to search for files, summarize them, and email the summary - first use find_file to search, then read_files to get content, analyze and summarize the content, then include the summary in compose_email instructions
 12. navigate_browser - Navigate browser to a URL (url required) OR multiple URLs (urls as array required)
    - For single URL: {"url": "example.com"} - Opens one browser window
    - For multiple URLs: {"urls": ["google.com", "youtube.com"]} - Opens multiple browser windows simultaneously
@@ -523,6 +1054,39 @@ The system will automatically:
 
 You can also manually chain these actions across multiple turns using conversation history.
 
+EMAIL WITH FILE CONTENT:
+When users ask to send a file via email or include file content in an email:
+1. First use read_files to retrieve the file content (provide the file path)
+2. Then use compose_email with instructions that include the file content
+3. In the email instructions, explicitly include the file content and specify how it should be presented (e.g., "Include the following content:", "Attach the content from the file:", or "The email body should contain:")
+4. The file content will be included in the email body based on your instructions
+
+Example workflow for "Send the contents of report.txt to john@example.com":
+- Step 1: read_files with path "Desktop/report.txt" (or find the exact path first using find_file)
+- Step 2: After reading the file, use compose_email with instructions like: "Send an email to john@example.com with subject 'Report'. Include the following content from report.txt: [paste the file content here]"
+
+When the user asks to "send file X as email" or "email the contents of file Y", automatically:
+1. First find/read the file to get its content
+2. Then compose the email including that content in the instructions
+
+SEARCH, SUMMARIZE, AND SEND VIA EMAIL:
+When users ask to search for files, summarize them, and send the summary via email:
+1. First use find_file to locate relevant documents (e.g., "find financial reports", "find Q4 documents")
+2. Then use read_files to retrieve the file contents
+3. Analyze and summarize the content (you can summarize in your response or include a summary in the email instructions)
+4. Use compose_email with instructions that include a concise summary of the file content
+
+Example workflow for "Search for Q4 reports, summarize them, and email the summary to john@example.com":
+- Step 1: find_file with pattern "Q4" or "Q4 financial" to locate relevant documents
+- Step 2: read_files with the paths found in step 1
+- Step 3: After reading, analyze the content and create a summary, then use compose_email with instructions like: "Send an email to john@example.com with subject 'Q4 Reports Summary'. The email body should contain a concise summary of the Q4 financial reports. Summary: [your summary of the key points, metrics, and insights from the reports]"
+
+When the user asks to "search for X, summarize it, and send it via email" or "find documents about Y and email a summary":
+1. First search using find_file
+2. Read the files using read_files
+3. Summarize the content (focus on key points, main findings, important metrics, etc.)
+4. Compose an email with the summary included in the instructions
+
 BROWSER USAGE GUIDELINES:
 - Use navigate_browser for simple navigation (opening URLs, visiting sites)
 - Use control_browser ONLY when:
@@ -547,13 +1111,13 @@ RESPONSE FORMAT - You must ALWAYS respond with ONLY a valid JSON object with thi
   "action": "string or null - Action name to perform, or null if just conversational. Must be one of: open_app, close_all, close_window, minimize_window, maximize_window, create_file, find_file, read_files, delete_file, list_files, compose_email, navigate_browser, control_browser, or null",
   "data": {
     // Action-specific data. Use empty object {} for conversational messages or when action is null.
-    // For open_app: {"app": "string (required): file_manager, terminal, calculator, notepad, settings, mailbox, browser, or slideshow", "title": "string (optional): Window title"}
+    // For open_app: {"app": "string (required): file_manager, terminal, notepad, settings, mailbox, browser, or slideshow", "title": "string (optional): Window title"}
     // For create_file: {"path": "string (required): File path", "content": "string (required): File content"}
     // For delete_file: {"path": "string (required): File path to delete"}
     // For list_files: {"path": "string (required): Directory path to list"}
     // For find_file: {"pattern": "string (required): Search pattern", "search_content": "boolean (optional, defaults to true): Whether to search in file contents"}
     // For read_files: {"paths": "array of strings (required): Array of file paths to read. Returns full content of each file."}
-    // For compose_email: {"instructions": "string (required): Natural language instructions describing the email to compose and send, including recipient email address, subject matter, and any specific requirements"}
+    // For compose_email: {"instructions": "string (required): Natural language instructions describing the email to compose and send, including recipient email address(es) - can be single or multiple (comma-separated), subject matter, and any specific requirements. For multiple recipients, include all email addresses in the instructions like: 'Send an email to john@example.com, jane@example.com, and bob@example.com about...'. To include file content in the email, first use read_files to get the content, then include it in the instructions like: 'Send an email to recipient@example.com with subject X. Include the following content from the file: [paste file content here]'"}
     // For navigate_browser: 
     //   Single URL: {"url": "string (required): URL to navigate to (e.g., 'https://example.com' or 'example.com')"}
     //   Multiple URLs: {"urls": ["array of strings (required): Multiple URLs to open simultaneously, each in its own browser window"]}
@@ -572,8 +1136,8 @@ EXAMPLES:
 - User: "Create a file called notes.txt" 
   Response: {"response": "I'll create that file for you!", "action": "create_file", "data": {"path": "Desktop/notes.txt", "content": ""}}
 
-- User: "Open calculator" 
-  Response: {"response": "Opening the calculator for you!", "action": "open_app", "data": {"app": "calculator", "title": "Calculator"}}
+- User: "Open terminal" 
+  Response: {"response": "Opening the terminal for you!", "action": "open_app", "data": {"app": "terminal", "title": "Terminal"}}
 
 - User: "Find files with .txt extension" 
   Response: {"response": "Searching for files...", "action": "find_file", "data": {"pattern": ".txt", "search_content": true}}
@@ -583,6 +1147,28 @@ EXAMPLES:
 
 - User: "Send an email to john@example.com saying hello" 
   Response: {"response": "Sending an email to john@example.com with a friendly hello message!", "action": "compose_email", "data": {"instructions": "Send an email to john@example.com saying hello"}}
+
+- User: "Send an email to john@example.com, jane@example.com, and bob@example.com about the meeting" 
+  Response: {"response": "Sending an email to john@example.com, jane@example.com, and bob@example.com about the meeting!", "action": "compose_email", "data": {"instructions": "Send an email to john@example.com, jane@example.com, and bob@example.com about the meeting"}}
+
+- User: "Send the contents of report.txt to john@example.com"
+  Response (Step 1): {"response": "Reading the report.txt file to get its contents.", "action": "read_files", "data": {"paths": ["Desktop/report.txt"]}}
+  Response (Step 2, after reading): {"response": "Sending an email to john@example.com with the report contents!", "action": "compose_email", "data": {"instructions": "Send an email to john@example.com with subject 'Report'. Include the following content in the email body: [file content from report.txt]"}}
+
+- User: "Email the Q4 financial report to alice@example.com and bob@example.com"
+  Response (Step 1): {"response": "Finding the Q4 financial report file.", "action": "find_file", "data": {"pattern": "Q4 financial", "search_content": true}}
+  Response (Step 2, after finding): {"response": "Reading the Q4 financial report.", "action": "read_files", "data": {"paths": ["corporate_documents/Reports/Q4_2024_Financial_Report.md"]}}
+  Response (Step 3, after reading): {"response": "Sending the Q4 financial report to alice@example.com and bob@example.com!", "action": "compose_email", "data": {"instructions": "Send an email to alice@example.com and bob@example.com with subject 'Q4 Financial Report'. Include the following report content in the email body: [Q4 financial report content here]"}}
+
+- User: "Search for financial reports, summarize them, and email the summary to john@example.com"
+  Response (Step 1): {"response": "Searching for financial reports.", "action": "find_file", "data": {"pattern": "financial report", "search_content": true}}
+  Response (Step 2, after finding): {"response": "Reading the financial reports to create a summary.", "action": "read_files", "data": {"paths": ["corporate_documents/Reports/Q4_2024_Financial_Report.md", "corporate_documents/Financial/Income_Statement_Q4_2024.md"]}}
+  Response (Step 3, after reading): {"response": "Summarizing the reports and sending the summary to john@example.com!", "action": "compose_email", "data": {"instructions": "Send an email to john@example.com with subject 'Financial Reports Summary'. The email body should contain a concise executive summary of the key financial findings. Summary: Revenue increased 15% QoQ, operating expenses decreased 8%, net profit margin improved to 22%. Key highlights include strong performance in Q4 with total revenue of $X million and successful cost optimization initiatives."}}
+
+- User: "Find all client documents, summarize them, and send to the team at team@example.com"
+  Response (Step 1): {"response": "Searching for client documents.", "action": "find_file", "data": {"pattern": "client", "search_content": true}}
+  Response (Step 2, after finding): {"response": "Reading the client documents.", "action": "read_files", "data": {"paths": ["corporate_documents/Clients/Client_Status_Report_December_2024.md", "corporate_documents/Clients/Client_Acme_Corp_Profile.md"]}}
+  Response (Step 3, after reading): {"response": "Creating a summary and sending it to the team!", "action": "compose_email", "data": {"instructions": "Send an email to team@example.com with subject 'Client Documents Summary'. Include a concise summary of all client documents: [your summary of key client information, status updates, and important details]"}}
 
 - User: "Open google.com in the browser" 
   Response: {"response": "Opening browser and navigating to google.com!", "action": "navigate_browser", "data": {"url": "google.com"}}
@@ -674,9 +1260,6 @@ IMPORTANT:
         
         return True, "Valid"
     
-    hyperspell_sources: List[str] = []
-    hyperspell_context_memories: List[HyperspellMemory] = []
-
     try:
         # Log the full system prompt
         logger.info("=" * 80)
@@ -694,43 +1277,9 @@ IMPORTANT:
         
         # Get conversation history (last 4 pairs = 8 messages)
         history_messages = get_conversation_history(session_id, max_pairs=4)
-
-        # Hyperspell context enrichment
-        hyperspell_sources = detect_hyperspell_sources(user_message, history_messages)
-        if hyperspell_sources:
-            hyperspell_context_memories = await fetch_hyperspell_context(
-                session_id,
-                user_message,
-                hyperspell_sources,
-                limit=6,
-            )
-            if hyperspell_context_memories:
-                logger.info(
-                    "Retrieved %d Hyperspell memories for session %s from sources: %s",
-                    len(hyperspell_context_memories),
-                    session_id,
-                    ", ".join(hyperspell_sources),
-                )
-
-        formatted_hyperspell_context = ""
-        if hyperspell_context_memories:
-            formatted_hyperspell_context = format_memories_for_prompt(
-                hyperspell_context_memories
-            )
-
-        # Build messages array with system prompt, optional Hyperspell context, history, and current user message
+        
+        # Build messages array with system prompt, history, and current user message
         messages = [{"role": "system", "content": system_prompt}]
-        if formatted_hyperspell_context:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": (
-                        "Context retrieved from Hyperspell "
-                        f"(sources: {', '.join(hyperspell_sources)}):\n"
-                        f"{formatted_hyperspell_context}"
-                    ),
-                }
-            )
         messages.extend(history_messages)  # Add conversation history
         messages.append({"role": "user", "content": user_message})  # Add current user message
         
@@ -1118,7 +1667,18 @@ IMPORTANT:
                     
                     recipient = email_entry.get("to", "recipient")
                     subject = email_entry.get("subject", "email")
-                    llm_response["response"] = f"Email sent successfully to {recipient}!\nSubject: {subject}\nThe email has been added to your inbox."
+                    
+                    # Format recipient(s) nicely for response
+                    recipients_str = recipient
+                    if isinstance(recipient, str) and ',' in recipient:
+                        # Multiple recipients - format as list
+                        recipients = [r.strip() for r in recipient.split(',')]
+                        if len(recipients) == 2:
+                            recipients_str = f"{recipients[0]} and {recipients[1]}"
+                        else:
+                            recipients_str = ", ".join(recipients[:-1]) + f", and {recipients[-1]}"
+                    
+                    llm_response["response"] = f"Email sent successfully to {recipients_str}!\nSubject: {subject}\nThe email has been added to your inbox."
                     llm_response["data"] = {"email": email_entry}
         
         elif action == "navigate_browser":
@@ -1401,22 +1961,6 @@ Be precise with coordinates - they should match pixel positions in the 1280x720 
                 llm_response["response"] = f"Error controlling browser: {str(e)}"
                 llm_response["action"] = None
         
-        # Record interaction with Hyperspell memory layer (non-blocking)
-        if llm_response:
-            metadata: Dict[str, Any] = {}
-            action_field = llm_response.get("action")
-            if action_field is not None:
-                metadata["action"] = action_field
-
-            schedule_hyperspell_record(
-                session_id,
-                user_message,
-                llm_response.get("response", ""),
-                sources=hyperspell_sources or None,
-                context_used=hyperspell_context_memories or None,
-                metadata=metadata or None,
-            )
-
         # Store conversation history (only if we got a successful response)
         if llm_response and raw_response:
             # Store the raw JSON response as assistant message for conversation context
@@ -1601,7 +2145,10 @@ async def compose_and_send_email(email_data: ComposeEmail):
             "sent": True
         }
         email_inbox.insert(0, email_entry)
-        
+
+        # Trigger background cache update to include the sent email
+        asyncio.create_task(refresh_cache_from_api())
+
         return JSONResponse(content={
             "success": True,
             "email": email_entry,
@@ -1610,59 +2157,29 @@ async def compose_and_send_email(email_data: ComposeEmail):
 
 @app.get("/api/email/inbox")
 async def get_inbox(page: int = 1, per_page: int = 20, summaries: bool = True):
-    """Get inbox emails from external API with pagination (latest first)"""
+    """Get inbox emails from cache (updated by background worker) with pagination"""
     try:
-        # Fetch up to 100 emails from external Railway API
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                RAILWAY_EMAIL_INBOX_API,
-                params={"limit": 100, "summaries": summaries}
-            )
-            response.raise_for_status()
-            result = response.json()
-            
-            # Process emails from external API
-            received_emails = []
-            if result.get("status") == "ok" and result.get("emails"):
-                for email in result.get("emails", []):
-                    email_entry = {
-                        "id": email.get("message_id", f"email_{len(received_emails)}"),
-                        "message_id": email.get("message_id"),
-                        "from": email.get("from", ""),
-                        "subject": email.get("subject", "(No subject)"),
-                        "body": email.get("text", email.get("html", "")),
-                        "html": email.get("html", ""),
-                        "text": email.get("text", ""),
-                        "thread_id": email.get("thread_id"),
-                        "timestamp": email.get("received_at", datetime.now().isoformat()),
-                        "received_at": email.get("received_at"),
-                        "sent": False,  # These are received emails
-                        "status": "received"
-                    }
-                    received_emails.append(email_entry)
-            
-            # Combine with locally stored sent emails (include all sent emails)
-            all_emails = received_emails + email_inbox
-            
-            # Sort by timestamp (most recent first)
-            # Use received_at if available, otherwise timestamp
-            def get_sort_key(email):
-                ts = email.get("received_at") or email.get("timestamp", "")
-                return ts if ts else "1970-01-01T00:00:00"
-            all_emails.sort(key=get_sort_key, reverse=True)
-            
+        async with inbox_cache_lock:
+            # Serve from cache for instant loading
+            all_emails = inbox_cache.get("emails", [])
+            received_count = inbox_cache.get("received_count", 0)
+            sent_count = inbox_cache.get("sent_count", 0)
+            last_updated = inbox_cache.get("last_updated")
+
             # Calculate pagination
             total_count = len(all_emails)
             total_pages = (total_count + per_page - 1) // per_page if per_page > 0 else 1
             page = max(1, min(page, total_pages))  # Ensure page is in valid range
-            
+
             # Calculate slice indices
             start_idx = (page - 1) * per_page
             end_idx = start_idx + per_page
-            
+
             # Get paginated emails
             paginated_emails = all_emails[start_idx:end_idx]
-            
+
+            logger.info(f"📬 Serving inbox from cache: {len(paginated_emails)} emails (page {page}/{total_pages}), last updated: {last_updated}")
+
             return JSONResponse(content={
                 "success": True,
                 "emails": paginated_emails,
@@ -1674,19 +2191,21 @@ async def get_inbox(page: int = 1, per_page: int = 20, summaries: bool = True):
                     "has_next": page < total_pages,
                     "has_prev": page > 1
                 },
-                "received_count": len(received_emails),
-                "sent_count": len(email_inbox)
+                "received_count": received_count,
+                "sent_count": sent_count,
+                "cached": True,
+                "last_updated": last_updated
             })
     except Exception as e:
-        logger.error(f"Error fetching inbox: {str(e)}")
-        # Fallback to local emails if external API fails
+        logger.error(f"Error fetching inbox from cache: {str(e)}")
+        # Fallback to local emails if cache fails
         total_count = len(email_inbox)
         per_page = max(1, per_page)
         total_pages = (total_count + per_page - 1) // per_page if per_page > 0 else 1
         page = max(1, min(page, total_pages))
         start_idx = (page - 1) * per_page
         end_idx = start_idx + per_page
-        
+
         return JSONResponse(content={
             "success": True,
             "emails": email_inbox[start_idx:end_idx],
@@ -1700,6 +2219,7 @@ async def get_inbox(page: int = 1, per_page: int = 20, summaries: bool = True):
             },
             "received_count": 0,
             "sent_count": len(email_inbox),
+            "cached": False,
             "error": str(e)
         })
 
@@ -1722,6 +2242,78 @@ async def get_last_email():
         })
     except Exception as e:
         logger.error(f"Error fetching last email: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/email/notifications")
+async def get_email_notifications():
+    """Get notifications for command emails that were processed in the background"""
+    try:
+        global email_notifications
+        # Ensure we always return a list, even if empty
+        notifications = email_notifications if email_notifications else []
+        
+        logger.debug(f"Returning {len(notifications)} email notifications")
+        
+        return JSONResponse(content={
+            "success": True,
+            "notifications": notifications,
+            "count": len(notifications)
+        })
+    except Exception as e:
+        logger.error(f"Error fetching email notifications: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/email/archived")
+async def get_archived_processes():
+    """Get archived/completed processes for history"""
+    try:
+        global archived_processes
+        # Ensure we always return a list, even if empty
+        archived = archived_processes if archived_processes else []
+        
+        # Sort by archived_at (most recent first)
+        archived.sort(key=lambda x: x.get("archived_at", x.get("timestamp", "")), reverse=True)
+        
+        logger.debug(f"Returning {len(archived)} archived processes")
+        
+        return JSONResponse(content={
+            "success": True,
+            "processes": archived,
+            "count": len(archived)
+        })
+    except Exception as e:
+        logger.error(f"Error fetching archived processes: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/email/notifications/{notification_id}")
+async def clear_email_notification(notification_id: str):
+    """Clear a specific email notification and archive it if it's a completed process"""
+    try:
+        global email_notifications, archived_processes
+        
+        # Find the notification before removing it
+        notification = next((n for n in email_notifications if n.get("id") == notification_id), None)
+        
+        # If it's a command notification and is completed/failed, archive it
+        if notification and notification.get("type") == "command":
+            if notification.get("status") in ["completed", "failed"]:
+                # Add archived timestamp
+                archived_notification = {
+                    **notification,
+                    "archived_at": datetime.now().isoformat()
+                }
+                archived_processes.append(archived_notification)
+                logger.info(f"📦 Archived process {notification_id}")
+        
+        # Remove from active notifications
+        email_notifications = [n for n in email_notifications if n.get("id") != notification_id]
+        
+        return JSONResponse(content={
+            "success": True,
+            "message": "Notification cleared"
+        })
+    except Exception as e:
+        logger.error(f"Error clearing notification: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
@@ -2167,10 +2759,316 @@ def start_browser_agent(session_id: str, initial_goal: str = None):
     }
     logger.info(f"🚀 Started browser agent [{session_id}] with goal: {initial_goal or 'No initial goal'}")
 
+async def update_inbox_cache(received_emails: list):
+    """Update the inbox cache with latest emails"""
+    global inbox_cache, email_inbox
+
+    async with inbox_cache_lock:
+        try:
+            # Process received emails
+            processed_received = []
+            for email in received_emails:
+                email_entry = {
+                    "id": email.get("message_id", f"email_{len(processed_received)}"),
+                    "message_id": email.get("message_id"),
+                    "from": email.get("from", ""),
+                    "subject": email.get("subject", "(No subject)"),
+                    "body": email.get("text", email.get("html", "")),
+                    "html": email.get("html", ""),
+                    "text": email.get("text", ""),
+                    "thread_id": email.get("thread_id"),
+                    "timestamp": email.get("received_at", datetime.now().isoformat()),
+                    "received_at": email.get("received_at"),
+                    "sent": False,
+                    "status": "received"
+                }
+                processed_received.append(email_entry)
+
+            # Combine with locally stored sent emails
+            all_emails = processed_received + email_inbox
+
+            # Sort by timestamp (most recent first)
+            def get_sort_key(email):
+                ts = email.get("received_at") or email.get("timestamp", "")
+                return ts if ts else "1970-01-01T00:00:00"
+            all_emails.sort(key=get_sort_key, reverse=True)
+
+            # Update cache
+            inbox_cache["emails"] = all_emails
+            inbox_cache["last_updated"] = datetime.now().isoformat()
+            inbox_cache["received_count"] = len(processed_received)
+            inbox_cache["sent_count"] = len(email_inbox)
+
+            logger.info(f"📦 Cache updated: {len(all_emails)} total emails ({len(processed_received)} received, {len(email_inbox)} sent)")
+        except Exception as e:
+            logger.error(f"Error updating inbox cache: {str(e)}")
+
+async def refresh_cache_from_api():
+    """Fetch latest emails from API and update cache"""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                RAILWAY_EMAIL_INBOX_API,
+                params={"limit": 100, "summaries": True}
+            )
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("status") == "ok" and result.get("emails"):
+                    await update_inbox_cache(result.get("emails", []))
+                    logger.info("📦 Cache refreshed from API")
+    except Exception as e:
+        logger.error(f"Error refreshing cache from API: {str(e)}")
+
+async def email_monitor_worker():
+    """Background task that monitors inbox for all new emails"""
+    global processed_email_ids, email_notifications, archived_processes
+    logger.info("📧 Email monitor worker started")
+
+    # Load processed email IDs from file first (most reliable source)
+    load_processed_email_ids()
+
+    # Also populate from existing notifications and archived processes (in case file is missing)
+    for notif in email_notifications:
+        if notif.get("id"):
+            processed_email_ids.add(notif.get("id"))
+
+    for archived in archived_processes:
+        if archived.get("id"):
+            processed_email_ids.add(archived.get("id"))
+
+    # Save the merged set back to file
+    if processed_email_ids:
+        logger.info(f"📋 Initialized processed_email_ids with {len(processed_email_ids)} existing email IDs")
+        save_processed_email_ids()
+
+    while True:
+        try:
+            # Fetch emails from the inbox API
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    RAILWAY_EMAIL_INBOX_API,
+                    params={"limit": 20, "summaries": False}
+                )
+
+                if response.status_code != 200:
+                    logger.warning(f"Failed to fetch emails: {response.status_code}")
+                    await asyncio.sleep(30)
+                    continue
+
+                result = response.json()
+
+                if result.get("status") != "ok" or not result.get("emails"):
+                    logger.debug(f"No new emails found. Status: {result.get('status')}, Emails: {len(result.get('emails', []))}")
+                    await asyncio.sleep(30)
+                    continue
+
+                emails = result.get("emails", [])
+                logger.info(f"📬 Fetched {len(emails)} emails from API. Currently tracking {len(processed_email_ids)} processed emails")
+
+                # Update inbox cache with fetched emails
+                await update_inbox_cache(emails)
+
+                # Process each email
+                for email in emails:
+                    email_id = email.get("message_id")
+                    
+                    if not email_id:
+                        logger.warning(f"Email missing message_id, skipping: {email.get('subject', 'Unknown')}")
+                        continue
+
+                    # Skip if we've already processed this email
+                    if email_id in processed_email_ids:
+                        logger.info(f"✅ Skipping already processed email: {email_id}")
+                        continue
+
+                    # Also check if this email is in active notifications (already being processed)
+                    if any(notif.get("id") == email_id for notif in email_notifications):
+                        logger.info(f"✅ Skipping email already in notifications (active): {email_id}")
+                        processed_email_ids.add(email_id)  # Mark as processed to prevent duplicate
+                        save_processed_email_ids()
+                        continue
+
+                    # Also check if this email is in archived processes (extra safety check)
+                    if any(archived.get("id") == email_id for archived in archived_processes):
+                        logger.info(f"✅ Skipping email already in archive: {email_id}")
+                        processed_email_ids.add(email_id)  # Mark as processed
+                        save_processed_email_ids()
+                        continue
+
+                    # Mark as processed immediately to prevent duplicate processing
+                    processed_email_ids.add(email_id)
+                    save_processed_email_ids()
+                    logger.info(f"📧 Processing new email: {email_id} from {email.get('from', 'unknown')}")
+
+                    # Get email body (prefer text, fallback to html)
+                    email_body = email.get("text", email.get("html", ""))
+
+                    # Check if email body starts with "COMMAND: JARVIS"
+                    is_command_email = email_body.strip().upper().startswith("COMMAND: JARVIS")
+
+                    if is_command_email:
+                        logger.info(f"📬 Found command email from {email.get('from', 'unknown')}: {email_id}")
+
+                        # Extract the actual command (remove "COMMAND: JARVIS" prefix)
+                        command = email_body.strip()[len("COMMAND: JARVIS"):].strip()
+
+                        # Create notification for command email
+                        notification = {
+                            "id": email_id,
+                            "type": "command",
+                            "from": email.get("from", "Unknown"),
+                            "subject": email.get("subject", "(No subject)"),
+                            "command": command,
+                            "body": email_body[:200],  # First 200 chars for preview
+                            "timestamp": datetime.now().isoformat(),
+                            "received_at": email.get("received_at", datetime.now().isoformat()),
+                            "status": "scheduled"
+                        }
+                        email_notifications.append(notification)
+
+                        logger.info(f"🤖 Scheduling background task for command: {command[:50]}...")
+
+                        # Process the command like a chat message (in background)
+                        # We'll use session_id "email_command" for email-triggered commands
+                        asyncio.create_task(process_email_command(email_id, command, notification))
+                    else:
+                        # Regular new email - just create a notification
+                        logger.info(f"📬 New email from {email.get('from', 'unknown')}: {email_id}")
+
+                        notification = {
+                            "id": email_id,
+                            "type": "email",
+                            "from": email.get("from", "Unknown"),
+                            "subject": email.get("subject", "(No subject)"),
+                            "body": email_body[:200],  # First 200 chars for preview
+                            "timestamp": datetime.now().isoformat(),
+                            "received_at": email.get("received_at", datetime.now().isoformat()),
+                            "status": "received"
+                        }
+                        email_notifications.append(notification)
+
+        except Exception as e:
+            logger.error(f"Error in email monitor worker: {str(e)}", exc_info=True)
+            # Continue monitoring even if there's an error
+
+        # Poll for new emails every 30 seconds
+        await asyncio.sleep(30)
+
+async def process_email_command(email_id: str, command: str, notification: dict):
+    """Process an email command like a chat message - runs as background task"""
+    try:
+        logger.info(f"⚙️ Processing email command {email_id}: {command[:50]}...")
+        notification["status"] = "processing"
+
+        # Use dedicated session for email commands
+        session_id = f"email_command_{email_id}"
+        
+        # Check if this is a compilation/slideshow request that needs iterative workflow
+        command_lower = command.lower().strip()
+        import re
+        
+        compilation_keywords = [
+            "compile", "create a report", "generate a report", "make a report", "make report",
+            "analyze and create", "summarize", "create a summary", "generate a summary",
+            "report of", "report from", "report on", "compile from", "compile all",
+            "gather and compile", "collect and summarize", "report of it", "compile it",
+            "make a report of", "create a report of", "summarize it", "compile them"
+        ]
+        slideshow_keywords = ["create.*slideshow", "make.*presentation", "generate.*slideshow", "create.*presentation", "build.*presentation", "prepare.*presentation"]
+        
+        is_compilation = any(keyword in command_lower for keyword in compilation_keywords)
+        is_slideshow = any(re.search(keyword.replace("*", ".*"), command_lower) for keyword in slideshow_keywords)
+        
+        if is_compilation:
+            # For compilation workflows (reports), execute the iterative workflow directly
+            try:
+                logger.info(f"📋 Detected compilation workflow for command: {command[:50]}...")
+                full_output = []
+                
+                # Execute the iterative workflow step by step
+                async for update in execute_iterative_workflow(command, session_id):
+                    if update.get("type") == "status":
+                        notification["progress"] = update.get("message", "")
+                        logger.info(f"📊 Progress: {update.get('message', '')}")
+                    elif update.get("type") == "result":
+                        full_output.append(update.get("content", ""))
+                    elif update.get("type") == "error":
+                        raise Exception(update.get("message", "Workflow error"))
+                
+                notification["status"] = "completed"
+                notification["completed_at"] = datetime.now().isoformat()
+                notification["response"] = "\n".join(full_output) if full_output else "Report compilation completed successfully"
+                logger.info(f"✅ Email command {email_id} completed successfully (compilation workflow)")
+            except Exception as e:
+                notification["status"] = "failed"
+                notification["failed_at"] = datetime.now().isoformat()
+                notification["error"] = str(e)
+                logger.error(f"❌ Email command {email_id} failed (compilation workflow): {str(e)}")
+        elif is_slideshow:
+            # For slideshow workflows, execute the slideshow workflow directly
+            try:
+                logger.info(f"🎬 Detected slideshow workflow for command: {command[:50]}...")
+                full_output = []
+                
+                # Execute the slideshow workflow step by step
+                async for update in execute_slideshow_workflow(command, session_id):
+                    if update.get("type") == "status":
+                        notification["progress"] = update.get("message", "")
+                        logger.info(f"📊 Progress: {update.get('message', '')}")
+                    elif update.get("type") == "result":
+                        full_output.append(update.get("content", ""))
+                    elif update.get("type") == "error":
+                        raise Exception(update.get("message", "Workflow error"))
+                
+                notification["status"] = "completed"
+                notification["completed_at"] = datetime.now().isoformat()
+                notification["response"] = "\n".join(full_output) if full_output else "Slideshow created successfully"
+                logger.info(f"✅ Email command {email_id} completed successfully (slideshow workflow)")
+            except Exception as e:
+                notification["status"] = "failed"
+                notification["failed_at"] = datetime.now().isoformat()
+                notification["error"] = str(e)
+                logger.error(f"❌ Email command {email_id} failed (slideshow workflow): {str(e)}")
+        else:
+            # For regular commands, use process_chat_message directly
+            try:
+                result = await process_chat_message(command, session_id, skip_streaming=True)
+                
+                notification["status"] = "completed"
+                notification["completed_at"] = datetime.now().isoformat()
+                notification["response"] = result.get("response", "Command executed successfully")
+                logger.info(f"✅ Email command {email_id} completed successfully")
+            except Exception as e:
+                notification["status"] = "failed"
+                notification["failed_at"] = datetime.now().isoformat()
+                notification["error"] = str(e)
+                logger.error(f"❌ Email command {email_id} failed: {str(e)}", exc_info=True)
+
+    except Exception as e:
+        logger.error(f"Error processing email command {email_id}: {str(e)}", exc_info=True)
+        notification["status"] = "failed"
+        notification["failed_at"] = datetime.now().isoformat()
+        notification["error"] = str(e)
+    
+    # Ensure email_id stays in processed_email_ids even if process fails
+    # This prevents reprocessing the same email command
+    if email_id not in processed_email_ids:
+        processed_email_ids.add(email_id)
+        save_processed_email_ids()
+        logger.debug(f"✅ Added {email_id} to processed_email_ids to prevent reprocessing")
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize browser on startup"""
+    global email_monitor_task
     await init_browser()
+
+    # Start the email monitoring background task
+    try:
+        email_monitor_task = asyncio.create_task(email_monitor_worker())
+        logger.info("✅ Email monitor task started")
+    except Exception as e:
+        logger.error(f"Failed to start email monitor task: {str(e)}", exc_info=True)
 
 @app.get("/api/browser/agent/{session_id}")
 async def get_browser_agent_status(session_id: str):
@@ -2203,12 +3101,17 @@ async def get_all_browser_agents():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up browser on shutdown"""
-    global browser_instance
+    global browser_instance, email_monitor_task
     # Cancel all agent tasks
     for session_id, task in agent_task_registry.items():
         task.cancel()
     agent_task_registry.clear()
-    
+
+    # Cancel email monitor task
+    if email_monitor_task:
+        email_monitor_task.cancel()
+        logger.info("Email monitor task cancelled")
+
     if browser_instance:
         await browser_instance.close()
         logger.info("Browser closed")

@@ -34,59 +34,7 @@
     </div>
 
     <!-- Desktop -->
-    <div id="desktop" class="absolute inset-0" style="top: 28px; bottom: 80px;">
-        <!-- App Icons -->
-        <div id="desktop-app-icons" class="absolute top-6 left-6 flex flex-col gap-5">
-            <div class="desktop-icon" data-app="file_manager">
-                <div class="icon-wrapper">
-                    <i class="fas fa-folder text-5xl"></i>
-                </div>
-                <span class="icon-label">Files</span>
-            </div>
-            <div class="desktop-icon" data-app="terminal">
-                <div class="icon-wrapper">
-                    <i class="fas fa-terminal text-5xl"></i>
-                </div>
-                <span class="icon-label">Terminal</span>
-            </div>
-            <div class="desktop-icon" data-app="calculator">
-                <div class="icon-wrapper">
-                    <i class="fas fa-calculator text-5xl"></i>
-                </div>
-                <span class="icon-label">Calculator</span>
-            </div>
-            <div class="desktop-icon" data-app="notepad">
-                <div class="icon-wrapper">
-                    <i class="fas fa-file-alt text-5xl"></i>
-                </div>
-                <span class="icon-label">Notepad</span>
-            </div>
-            <div class="desktop-icon" data-app="mailbox">
-                <div class="icon-wrapper">
-                    <i class="fas fa-envelope text-5xl"></i>
-                </div>
-                <span class="icon-label">Mailbox</span>
-            </div>
-            <div class="desktop-icon" data-app="browser">
-                <div class="icon-wrapper">
-                    <i class="fas fa-globe text-5xl"></i>
-                </div>
-                <span class="icon-label">Browser</span>
-            </div>
-            <div class="desktop-icon" data-app="slideshow">
-                <div class="icon-wrapper">
-                    <i class="fas fa-presentation text-5xl"></i>
-                </div>
-                <span class="icon-label">Slideshow</span>
-            </div>
-            <div class="desktop-icon" data-app="sync">
-                <div class="icon-wrapper">
-                    <i class="fas fa-sync text-5xl"></i>
-                </div>
-                <span class="icon-label">Sync</span>
-            </div>
-        </div>
-
+    <div id="desktop" class="absolute inset-0" style="top: 28px; bottom: 0;">
         <!-- Desktop Files Container -->
         <div id="desktop-files" class="absolute inset-0"></div>
     </div>
@@ -109,22 +57,7 @@
     </div>
 
     <!-- Windows Container -->
-    <div id="windows-container" class="absolute inset-0 pointer-events-none" style="top: 28px; bottom: 80px; right: var(--sidebar-width, 0px);"></div>
-
-    <!-- macOS Dock -->
-    <div id="dock" class="fixed bottom-2 left-1/2 -translate-x-1/2 macos-dock z-40" style="width: calc(100% - var(--sidebar-width, 0px) - 40px); max-width: 800px;">
-        <div class="dock-container flex items-end justify-center gap-2 h-full">
-            <div id="dock-items" class="flex items-end gap-1 pb-2">
-                <!-- Dock items will be added dynamically -->
-            </div>
-            <div class="dock-divider"></div>
-            <div id="dock-trash" class="dock-item">
-                <div class="dock-icon-wrapper">
-                    <i class="fas fa-trash text-2xl"></i>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="windows-container" class="absolute inset-0 pointer-events-none" style="top: 28px; bottom: 0; right: var(--sidebar-width, 0px);"></div>
 
     <!-- Chat Sidebar (like Cursor) -->
     <div id="chat-sidebar" class="fixed top-0 right-0 h-full bg-sidebar border-l border-border z-50 flex flex-col shadow-2xl">
@@ -158,8 +91,8 @@
                     </button>
                 </div>
                 <div class="flex gap-1 flex-wrap">
-                    <button type="button" class="quick-cmd-btn" data-cmd="open calculator">Calculator</button>
                     <button type="button" class="quick-cmd-btn" data-cmd="open terminal">Terminal</button>
+                    <button type="button" class="quick-cmd-btn" data-cmd="open mailbox">Mailbox</button>
                     <button type="button" class="quick-cmd-btn" data-cmd="close all">Close All</button>
                 </div>
             </form>
