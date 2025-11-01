@@ -2261,27 +2261,42 @@ Be precise with coordinates - they should match pixel positions in the 1280x720 
 async def list_files(path: str = ""):
     """List files and folders in a directory"""
     try:
+        root_dir = DATA_DIR
+        
         if path:
-            # Validate path to prevent directory traversal
-            safe_path = Path(path).name
-            target_dir = DATA_DIR / safe_path
+            # Resolve path properly while preventing directory traversal
+            safe_path = Path(path)
+            # Resolve relative to root_dir and ensure it's still within root_dir
+            target_dir = (root_dir / safe_path).resolve()
+            
+            # Security check: ensure the resolved path is still within root_dir
+            try:
+                target_dir.relative_to(root_dir.resolve())
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid path: directory traversal not allowed")
         else:
-            target_dir = DATA_DIR
+            target_dir = root_dir
         
         if not target_dir.exists() or not target_dir.is_dir():
             raise HTTPException(status_code=404, detail="Directory not found")
         
         items = []
         for item in sorted(target_dir.iterdir()):
+            # Skip hidden files/directories (starting with .)
+            if item.name.startswith('.'):
+                continue
+                
             items.append({
                 "name": item.name,
-                "path": str(item.relative_to(DATA_DIR)),
+                "path": str(item.relative_to(root_dir)),
                 "type": "folder" if item.is_dir() else "file",
                 "size": item.stat().st_size if item.is_file() else 0,
                 "modified": item.stat().st_mtime
             })
         
         return JSONResponse(content={"items": items, "path": path})
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2289,18 +2304,25 @@ async def list_files(path: str = ""):
 async def read_file(path: str):
     """Read a text file"""
     try:
-        # Validate path
-        safe_path = Path(path)
-        if ".." in str(safe_path) or safe_path.is_absolute():
-            raise HTTPException(status_code=400, detail="Invalid path")
+        root_dir = DATA_DIR
         
-        target_file = DATA_DIR / safe_path
+        # Validate and resolve path
+        safe_path = Path(path)
+        target_file = (root_dir / safe_path).resolve()
+        
+        # Security check: ensure the resolved path is still within root_dir
+        try:
+            target_file.relative_to(root_dir.resolve())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid path: directory traversal not allowed")
         
         if not target_file.exists() or not target_file.is_file():
             raise HTTPException(status_code=404, detail="File not found")
         
         content = target_file.read_text(encoding='utf-8')
         return JSONResponse(content={"content": content, "path": path})
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
