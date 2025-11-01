@@ -30,5 +30,5 @@ An AI-powered operating system interface where you can control your OS through n
   - "Create a file called notes.txt with some content"
   - "Find files with .txt extension"
   - "Delete the file notes.txt"
-  - "Open calculator"
+  - "Open terminal"
   - "List all files"

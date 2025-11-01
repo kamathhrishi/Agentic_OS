@@ -54,37 +54,6 @@ const appTemplates = {
             </div>
         `
     },
-    calculator: {
-        title: 'Calculator',
-        icon: 'fa-calculator',
-        color: 'text-purple-400',
-        content: `
-            <div class="h-full flex flex-col">
-                <div class="calculator-display text-white" id="calc-display">0</div>
-                <div class="calculator-buttons">
-                    <button class="calc-btn" onclick="calcInput('C')">C</button>
-                    <button class="calc-btn" onclick="calcInput('±')">±</button>
-                    <button class="calc-btn" onclick="calcInput('%')">%</button>
-                    <button class="calc-btn operator" onclick="calcInput('/')">÷</button>
-                    <button class="calc-btn" onclick="calcInput('7')">7</button>
-                    <button class="calc-btn" onclick="calcInput('8')">8</button>
-                    <button class="calc-btn" onclick="calcInput('9')">9</button>
-                    <button class="calc-btn operator" onclick="calcInput('*')">×</button>
-                    <button class="calc-btn" onclick="calcInput('4')">4</button>
-                    <button class="calc-btn" onclick="calcInput('5')">5</button>
-                    <button class="calc-btn" onclick="calcInput('6')">6</button>
-                    <button class="calc-btn operator" onclick="calcInput('-')">-</button>
-                    <button class="calc-btn" onclick="calcInput('1')">1</button>
-                    <button class="calc-btn" onclick="calcInput('2')">2</button>
-                    <button class="calc-btn" onclick="calcInput('3')">3</button>
-                    <button class="calc-btn operator" onclick="calcInput('+')">+</button>
-                    <button class="calc-btn" onclick="calcInput('0')" style="grid-column: span 2;">0</button>
-                    <button class="calc-btn" onclick="calcInput('.')">.</button>
-                    <button class="calc-btn operator" onclick="calcInput('=')">=</button>
-                </div>
-            </div>
-        `
-    },
     notepad: {
         title: 'Notepad',
         icon: 'fa-file-alt',
@@ -147,6 +116,14 @@ You can type anything here...</textarea>
                     <div class="flex-1"></div>
                     <div class="text-sm text-text-secondary" id="mailbox-status">Loading...</div>
                 </div>
+                <div class="mailbox-tabs">
+                    <button class="mailbox-tab active" onclick="switchMailboxTab('inbox')" data-tab="inbox">
+                        📧 Inbox
+                    </button>
+                    <button class="mailbox-tab" onclick="switchMailboxTab('notifications')" data-tab="notifications">
+                        🔔 Notifications<span class="tab-badge" id="notifications-badge" style="display: none;">0</span>
+                    </button>
+                </div>
                 <div class="mailbox-content flex-1 overflow-auto" id="mailbox-content">
                     <div id="mailbox-inbox-view" class="mailbox-view">
                         <div class="text-center text-text-secondary">Loading inbox...</div>
@@ -160,11 +137,15 @@ You can type anything here...</textarea>
                             Next <i class="fas fa-chevron-right"></i>
                         </button>
                     </div>
+                    <div id="mailbox-notifications-view" class="mailbox-view hidden">
+                        <div class="text-center text-text-secondary mb-4">All email notifications</div>
+                        <div id="notifications-list"></div>
+                    </div>
                     <div id="mailbox-compose-view" class="mailbox-view hidden">
                         <div class="mailbox-compose-form space-y-4">
                             <div>
                                 <label class="block text-sm font-medium mb-2 text-text-secondary">Instructions for AI</label>
-                                <textarea id="compose-instructions" 
+                                <textarea id="compose-instructions"
                                     class="w-full bg-input text-black px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm placeholder-text-secondary min-h-[120px]"
                                     placeholder="Describe the email you want to send. For example: 'Email Alex Johnson at zoebex01@gmail.com about the launch. Mention the roadmap deck and ask for feedback by Friday.'"></textarea>
                             </div>
@@ -226,7 +207,7 @@ You can type anything here...</textarea>
     },
     slideshow: {
         title: 'Slideshow',
-        icon: 'fa-presentation',
+        icon: 'fa-images',
         color: 'text-pink-400',
         content: `
             <div class="slideshow-container h-full flex flex-col">
@@ -310,6 +291,42 @@ You can type anything here...</textarea>
             </div>
         `
     },
+    scheduled_processes: {
+        title: 'Scheduled Processes',
+        icon: 'fa-tasks',
+        color: 'text-purple-400',
+        content: `
+            <div class="scheduled-processes-container h-full flex flex-col">
+                <div class="scheduled-processes-header mb-4 pb-4 border-b border-border">
+                    <h2 class="text-xl font-semibold text-white mb-2">⚙️ Scheduled Processes</h2>
+                    <p class="text-sm text-text-secondary">Commands from COMMAND: JARVIS emails</p>
+                </div>
+                <div class="scheduled-processes-tabs mb-4 flex gap-2 border-b border-border">
+                    <button class="scheduled-processes-tab active" data-tab="active" onclick="switchScheduledProcessesTab('active')">
+                        Active
+                    </button>
+                    <button class="scheduled-processes-tab" data-tab="completed" onclick="switchScheduledProcessesTab('completed')">
+                        Completed History
+                    </button>
+                </div>
+                <div class="scheduled-processes-toolbar mb-4 flex items-center gap-2">
+                    <button class="toolbar-btn" onclick="refreshScheduledProcesses()" title="Refresh">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <div class="flex-1"></div>
+                    <div class="text-sm text-text-secondary" id="scheduled-processes-status">Loading...</div>
+                </div>
+                <div class="scheduled-processes-content flex-1 overflow-auto" id="scheduled-processes-content">
+                    <div id="scheduled-processes-list" class="space-y-4">
+                        <div class="text-center text-text-secondary py-8">
+                            <i class="fas fa-spinner fa-spin text-3xl mb-3"></i>
+                            <p>Loading scheduled processes...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `
+    },
     default: {
         title: 'Application',
         icon: 'fa-window-maximize',
@@ -325,77 +342,6 @@ You can type anything here...</textarea>
     }
 };
 
-// Calculator state
-let calcState = {
-    display: '0',
-    operand1: null,
-    operand2: null,
-    operator: null,
-    waitingForOperand: false
-};
-
-function calcInput(value) {
-    const display = document.getElementById('calc-display');
-    
-    if (value === 'C') {
-        calcState = { display: '0', operand1: null, operand2: null, operator: null, waitingForOperand: false };
-        display.textContent = '0';
-        return;
-    }
-    
-    if (value === '±') {
-        calcState.display = (parseFloat(calcState.display) * -1).toString();
-        display.textContent = calcState.display;
-        return;
-    }
-    
-    if (['+', '-', '*', '/', '%'].includes(value)) {
-        if (calcState.operand1 === null) {
-            calcState.operand1 = parseFloat(calcState.display);
-        } else if (calcState.operator) {
-            calcState.operand2 = parseFloat(calcState.display);
-            calcState.operand1 = calculate();
-            display.textContent = calcState.operand1.toString();
-            calcState.operand2 = null;
-        }
-        calcState.operator = value;
-        calcState.waitingForOperand = true;
-        return;
-    }
-    
-    if (value === '=') {
-        if (calcState.operator && calcState.operand1 !== null) {
-            calcState.operand2 = parseFloat(calcState.display);
-            calcState.operand1 = calculate();
-            display.textContent = calcState.operand1.toString();
-            calcState.operator = null;
-            calcState.operand2 = null;
-            calcState.waitingForOperand = true;
-        }
-        return;
-    }
-    
-    if (calcState.waitingForOperand) {
-        calcState.display = value;
-        calcState.waitingForOperand = false;
-    } else {
-        calcState.display = calcState.display === '0' ? value : calcState.display + value;
-    }
-    
-    display.textContent = calcState.display;
-}
-
-function calculate() {
-    const { operand1, operand2, operator } = calcState;
-    switch (operator) {
-        case '+': return operand1 + operand2;
-        case '-': return operand1 - operand2;
-        case '*': return operand1 * operand2;
-        case '/': return operand2 !== 0 ? operand1 / operand2 : 0;
-        case '%': return operand1 % operand2;
-        default: return operand2 || operand1;
-    }
-}
 
 // Set sidebar width CSS variable
 function updateSidebarWidth() {
@@ -511,6 +457,13 @@ function createWindow(appName = 'default', title = null, position = null) {
                 syncLoadIntegrations();
             }
         }, 100);
+    } else if (appName === 'scheduled_processes') {
+        // Initialize scheduled processes app
+        setTimeout(async () => {
+            await refreshScheduledProcesses();
+            // Also load archived processes initially
+            await loadArchivedProcesses();
+        }, 100);
     }
 
     return windowId;
@@ -564,57 +517,9 @@ function closeAllWindows() {
     windows.forEach((win, id) => closeWindow(id));
 }
 
+// Dock removed - using desktop icons instead
 function updateDock() {
-    const dockItems = document.getElementById('dock-items');
-    dockItems.innerHTML = '';
-    
-    // Add apps to dock
-    const dockApps = ['file_manager', 'terminal', 'calculator', 'notepad', 'mailbox', 'browser', 'slideshow', 'sync'];
-    dockApps.forEach(appName => {
-        const app = appTemplates[appName];
-        if (!app) return;
-        
-        const dockItem = document.createElement('div');
-        dockItem.className = 'dock-item';
-        dockItem.dataset.app = appName;
-        dockItem.innerHTML = `
-            <div class="dock-icon-wrapper">
-                <i class="fas ${app.icon} ${app.color} text-3xl"></i>
-            </div>
-        `;
-        
-        dockItem.addEventListener('click', () => {
-            createWindow(appName);
-        });
-        
-        dockItems.appendChild(dockItem);
-    });
-    
-    // Add open windows to dock
-    windows.forEach((win, id) => {
-        const app = appTemplates[win.app];
-        if (!app) return;
-        
-        const dockItem = document.createElement('div');
-        dockItem.className = `dock-item ${win.minimized ? '' : 'active'}`;
-        dockItem.dataset.windowId = id;
-        dockItem.innerHTML = `
-            <div class="dock-icon-wrapper">
-                <i class="fas ${app.icon} ${app.color} text-3xl"></i>
-            </div>
-        `;
-        
-        dockItem.addEventListener('click', () => {
-            if (win.minimized) {
-                minimizeWindow(id);
-            } else {
-                bringToFront(win.element);
-            }
-            updateDock();
-        });
-        
-        dockItems.appendChild(dockItem);
-    });
+    // Dock functionality removed - desktop icons are used instead
 }
 
 // Mouse events for dragging
@@ -622,9 +527,8 @@ document.addEventListener('mousemove', (e) => {
     if (draggedWindow && !draggedWindow.classList.contains('maximized')) {
         const sidebarWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 380;
         const menuBarHeight = 28;
-        const dockHeight = 80;
         const maxLeft = window.innerWidth - sidebarWidth - draggedWindow.offsetWidth;
-        const maxTop = window.innerHeight - dockHeight - draggedWindow.offsetHeight;
+        const maxTop = window.innerHeight - draggedWindow.offsetHeight;
         const newLeft = Math.max(0, Math.min(e.clientX - dragOffset.x, maxLeft));
         const newTop = Math.max(menuBarHeight, Math.min(e.clientY - dragOffset.y, maxTop));
         draggedWindow.style.left = `${newLeft}px`;
@@ -636,12 +540,97 @@ document.addEventListener('mouseup', () => {
     draggedWindow = null;
 });
 
-// Desktop app icons
-document.querySelectorAll('#desktop-app-icons .desktop-icon').forEach(icon => {
-    icon.addEventListener('dblclick', () => {
-        const app = icon.dataset.app;
-        createWindow(app);
+// Initialize desktop icons distributed across the desktop
+function initDesktopIcons() {
+    const desktop = document.getElementById('desktop');
+    const desktopFiles = document.getElementById('desktop-files');
+    
+    if (!desktop || !desktopFiles) {
+        console.warn('Desktop or desktop-files container not found');
+        return;
+    }
+    
+    // Remove existing desktop app icons (but keep file icons)
+    const existingIcons = desktopFiles.querySelectorAll('.desktop-icon[data-app]');
+    existingIcons.forEach(icon => icon.remove());
+    
+    const appsToShow = ['file_manager', 'terminal', 'notepad', 'mailbox', 'browser', 'slideshow', 'sync', 'scheduled_processes'];
+    
+    // Calculate positions - distribute icons across desktop in a grid
+    const iconSize = 90;
+    const spacing = 100;
+    const startX = 50;
+    const startY = 50;
+    const iconsPerRow = Math.floor((window.innerWidth - startX * 2) / spacing);
+    
+    appsToShow.forEach((appName, index) => {
+        const app = appTemplates[appName];
+        if (!app) return;
+        
+        const row = Math.floor(index / iconsPerRow);
+        const col = index % iconsPerRow;
+        const left = startX + col * spacing;
+        const top = startY + row * spacing;
+        
+        const icon = document.createElement('div');
+        icon.className = 'desktop-icon';
+        icon.dataset.app = appName;
+        icon.style.position = 'absolute';
+        icon.style.left = `${left}px`;
+        icon.style.top = `${top}px`;
+        icon.style.width = `${iconSize}px`;
+        icon.style.cursor = 'pointer';
+        
+        // Add notification badge for mailbox
+        const badgeHtml = appName === 'mailbox' ? '<div class="desktop-icon-badge" id="mailbox-desktop-badge" style="display: none;">0</div>' : '';
+        
+        icon.innerHTML = `
+            <div class="icon-wrapper">
+                <i class="fas ${app.icon} ${app.color || 'text-slate-400'} text-5xl"></i>
+                ${badgeHtml}
+            </div>
+            <span class="icon-label">${app.title}</span>
+        `;
+        
+        // Double-click to open
+        icon.addEventListener('dblclick', () => {
+            createWindow(appName);
+        });
+        
+        desktopFiles.appendChild(icon);
     });
+}
+
+// Initialize desktop icons when DOM is ready
+function ensureDesktopIcons() {
+    const desktop = document.getElementById('desktop');
+    const desktopFiles = document.getElementById('desktop-files');
+    
+    if (!desktop || !desktopFiles) {
+        // Retry after a short delay if DOM not ready
+        setTimeout(ensureDesktopIcons, 100);
+        return;
+    }
+    
+    initDesktopIcons();
+}
+
+// Initialize on DOM ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ensureDesktopIcons);
+} else {
+    // DOM already ready
+    ensureDesktopIcons();
+}
+
+// Re-initialize on window resize to reposition icons
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        ensureDesktopIcons();
+        refreshDesktop(); // Also refresh desktop files to reposition them
+    }, 250);
 });
 
 // Desktop right-click context menu
@@ -1135,7 +1124,7 @@ document.querySelectorAll('.quick-cmd-btn').forEach(btn => {
 
 // Welcome message
 setTimeout(() => {
-    addChatMessage('Hello! I\'m your OS assistant powered by AI. You can control your OS using natural language. Try commands like:\n- "Create a file called notes.txt with some content"\n- "Find files with .txt extension"\n- "Delete the file notes.txt"\n- "Open calculator" or "Open mailbox"\n- "Open google.com" or "Visit wikipedia.org"\n- "Open google.com and also open youtube.com" (multiple sites!)\n- "Click the search button" (when browser is open)\n- "Type hello in the search box" (when browser is open)\n- "Scroll down on the page"\n- "List all files"\n- "Email Alex Johnson at zoebex01@gmail.com about the launch"\n\nI can create files, find files, send emails, browse the web, control browsers using AI vision, and open apps - just ask me!', 'assistant');
+    addChatMessage('Hello! I\'m your OS assistant powered by AI. You can control your OS using natural language. Try commands like:\n- "Create a file called notes.txt with some content"\n- "Find files with .txt extension"\n- "Delete the file notes.txt"\n- "Open mailbox" or "Open terminal"\n- "Open google.com" or "Visit wikipedia.org"\n- "Open google.com and also open youtube.com" (multiple sites!)\n- "Click the search button" (when browser is open)\n- "Type hello in the search box" (when browser is open)\n- "Scroll down on the page"\n- "List all files"\n- "Email Alex Johnson at zoebex01@gmail.com about the launch"\n\nI can create files, find files, send emails, browse the web, control browsers using AI vision, and open apps - just ask me!', 'assistant');
 }, 500);
 
 // File Manager Functions
@@ -1247,20 +1236,43 @@ async function fileManagerNewFile() {
 
 // Desktop Functions
 async function refreshDesktop() {
-    desktopFiles.innerHTML = '';
+    // Only remove file icons, preserve app icons
+    const existingFileIcons = desktopFiles.querySelectorAll('.desktop-file-icon');
+    existingFileIcons.forEach(icon => icon.remove());
+    
+    // Ensure app icons are present
+    ensureDesktopIcons();
+    
+    // Wait a tick to ensure app icons are created
+    await new Promise(resolve => setTimeout(resolve, 0));
     
     try {
         const response = await fetch('/api/files/list?path=Desktop');
         const data = await response.json();
         
         if (data.items && data.items.length > 0) {
-            const appIconsContainer = document.getElementById('desktop-app-icons');
-            const appIconsWidth = appIconsContainer.offsetWidth || 120;
+            // Calculate position based on app icons
+            const appIcons = desktopFiles.querySelectorAll('.desktop-icon[data-app]');
+            const iconSize = 90;
+            const spacing = 100;
+            const startX = 50;
+            const startY = 50;
             
-            let row = 0;
-            let col = 0;
-            const iconsPerRow = Math.floor((window.innerWidth - appIconsWidth - 100) / 100);
+            // Find the rightmost app icon position
+            let maxAppIconRight = startX;
+            appIcons.forEach(icon => {
+                const rect = icon.getBoundingClientRect();
+                const left = parseInt(icon.style.left) || 0;
+                maxAppIconRight = Math.max(maxAppIconRight, left + iconSize);
+            });
             
+            // Calculate how many app icons per row to determine file icon starting position
+            const iconsPerRow = Math.floor((window.innerWidth - startX * 2) / spacing);
+            const appIconRows = Math.ceil(appIcons.length / iconsPerRow);
+            const fileStartX = startX;
+            const fileStartY = startY + (appIconRows * spacing);
+            
+            // Position file icons below app icons
             data.items.forEach((item, index) => {
                 const fileIcon = document.createElement('div');
                 fileIcon.className = 'desktop-file-icon';
@@ -1268,9 +1280,10 @@ async function refreshDesktop() {
                 fileIcon.dataset.type = item.type;
                 fileIcon.dataset.name = item.name;
                 
-                // Position icons in a grid starting after app icons
-                const left = appIconsWidth + 50 + (col % iconsPerRow) * 100;
-                const top = 50 + Math.floor(col / iconsPerRow) * 100;
+                const row = Math.floor(index / iconsPerRow);
+                const col = index % iconsPerRow;
+                const left = fileStartX + col * spacing;
+                const top = fileStartY + row * spacing;
                 
                 fileIcon.style.left = `${left}px`;
                 fileIcon.style.top = `${top}px`;
@@ -1314,7 +1327,6 @@ async function refreshDesktop() {
                 });
                 
                 desktopFiles.appendChild(fileIcon);
-                col++;
             });
         }
     } catch (error) {
@@ -1490,8 +1502,320 @@ async function notepadSaveAs() {
 }
 
 // Initialize file manager when window is created
+// Email notification tracking
+let allNotifications = [];
+let shownNotifications = new Set();
+
+// Tab switching function
+function switchMailboxTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.mailbox-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelector(`.mailbox-tab[data-tab="${tabName}"]`)?.classList.add('active');
+
+    // Update view visibility
+    document.getElementById('mailbox-inbox-view')?.classList.toggle('hidden', tabName !== 'inbox');
+    document.getElementById('mailbox-pagination')?.classList.toggle('hidden', tabName !== 'inbox');
+    document.getElementById('mailbox-notifications-view')?.classList.toggle('hidden', tabName !== 'notifications');
+    document.getElementById('mailbox-compose-view')?.classList.add('hidden');
+
+    // Refresh the content based on tab
+    if (tabName === 'notifications') {
+        updateNotificationsView();
+    }
+}
+
+// Update the mailbox notification badge
+function updateMailboxBadge() {
+    const unreadCount = allNotifications.filter(n => !n.read && n.type === 'email').length;
+    
+    // Update desktop icon badge - try to find it, or create it if missing
+    let desktopBadge = document.getElementById('mailbox-desktop-badge');
+    
+    // If badge doesn't exist, try to find the mailbox icon and create badge
+    if (!desktopBadge) {
+        const mailboxIcon = document.querySelector('.desktop-icon[data-app="mailbox"] .icon-wrapper');
+        if (mailboxIcon) {
+            desktopBadge = document.createElement('div');
+            desktopBadge.id = 'mailbox-desktop-badge';
+            desktopBadge.className = 'desktop-icon-badge';
+            desktopBadge.style.display = 'none';
+            mailboxIcon.appendChild(desktopBadge);
+        }
+    }
+    
+    if (desktopBadge) {
+        if (unreadCount > 0) {
+            desktopBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+            desktopBadge.style.display = 'flex';
+        } else {
+            desktopBadge.style.display = 'none';
+        }
+    }
+
+    // Note: Scheduled processes badge is now in the separate desktop app
+
+    const notificationsBadge = document.getElementById('notifications-badge');
+    if (notificationsBadge) {
+        const totalUnread = allNotifications.filter(n => !n.read).length;
+        if (totalUnread > 0) {
+            notificationsBadge.textContent = totalUnread;
+            notificationsBadge.style.display = 'inline-block';
+        } else {
+            notificationsBadge.style.display = 'none';
+        }
+    }
+}
+
+// Current tab for scheduled processes view
+let currentScheduledProcessesTab = 'active';
+let archivedProcesses = [];
+
+// Tab switching for scheduled processes
+function switchScheduledProcessesTab(tabName) {
+    currentScheduledProcessesTab = tabName;
+    
+    // Update tab buttons
+    document.querySelectorAll('.scheduled-processes-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+    
+    // Refresh the view
+    updateScheduledProcessesView();
+}
+
+// Update scheduled processes view (for the desktop app)
+function updateScheduledProcessesView() {
+    const tasksList = document.getElementById('scheduled-processes-list');
+    const statusEl = document.getElementById('scheduled-processes-status');
+    
+    if (!tasksList) return;
+
+    if (currentScheduledProcessesTab === 'active') {
+        // Show active processes
+        const commandNotifications = allNotifications.filter(n => n.type === 'command');
+        
+        if (statusEl) {
+            const activeCount = commandNotifications.filter(n => n.status === 'scheduled' || n.status === 'processing').length;
+            statusEl.textContent = `${commandNotifications.length} process${commandNotifications.length !== 1 ? 'es' : ''} (${activeCount} active)`;
+        }
+
+        if (commandNotifications.length === 0) {
+            tasksList.innerHTML = '<div class="text-center text-text-secondary py-12"><p>No active processes</p><p class="text-xs mt-2">Emails starting with "COMMAND: JARVIS" will appear here</p></div>';
+            return;
+        }
+
+        tasksList.innerHTML = commandNotifications.map(notification => {
+            const statusEmoji = {
+                'scheduled': '📋',
+                'processing': '⚙️',
+                'completed': '✅',
+                'failed': '❌'
+            };
+            const emoji = statusEmoji[notification.status] || '🤖';
+
+            return `
+                <div class="task-item">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="font-semibold text-sm">${emoji} ${notification.subject}</div>
+                        <span class="task-status ${notification.status}">${notification.status}</span>
+                    </div>
+                    <div class="text-xs text-text-secondary mb-1">From: ${notification.from}</div>
+                    ${notification.command ? `<div class="text-xs text-text-secondary mb-2">Command: ${notification.command.substring(0, 80)}${notification.command.length > 80 ? '...' : ''}</div>` : ''}
+                    ${notification.progress ? `<div class="text-xs mt-2 p-2 bg-blue-50 rounded border border-blue-200">📊 ${notification.progress}</div>` : ''}
+                    ${notification.status === 'completed' && notification.response ? `<div class="text-xs mt-2 p-2 bg-green-50 rounded border border-green-200">✅ <strong>Result:</strong><br/>${notification.response.substring(0, 500)}${notification.response.length > 500 ? '...' : ''}</div>` : ''}
+                    ${notification.status === 'failed' && notification.error ? `<div class="text-xs mt-2 p-2 bg-red-50 rounded border border-red-200">❌ <strong>Error:</strong> ${notification.error}</div>` : ''}
+                    <div class="flex items-center justify-between mt-2">
+                        <div class="text-xs text-text-secondary">${new Date(notification.timestamp).toLocaleString()}</div>
+                        ${notification.status === 'completed' || notification.status === 'failed' ? `<button class="text-xs text-blue-500 hover:text-blue-700" onclick="archiveProcess('${notification.id}')" title="Archive">📦 Archive</button>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } else {
+        // Show archived processes
+        if (statusEl) {
+            statusEl.textContent = `${archivedProcesses.length} archived process${archivedProcesses.length !== 1 ? 'es' : ''}`;
+        }
+
+        if (archivedProcesses.length === 0) {
+            tasksList.innerHTML = '<div class="text-center text-text-secondary py-12"><p>No archived processes</p><p class="text-xs mt-2">Completed or failed processes will appear here after being archived</p></div>';
+            return;
+        }
+
+        tasksList.innerHTML = archivedProcesses.map(process => {
+            const statusEmoji = {
+                'scheduled': '📋',
+                'processing': '⚙️',
+                'completed': '✅',
+                'failed': '❌'
+            };
+            const emoji = statusEmoji[process.status] || '🤖';
+            const archivedDate = process.archived_at || process.completed_at || process.failed_at || process.timestamp;
+
+            return `
+                <div class="task-item opacity-75">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="font-semibold text-sm">${emoji} ${process.subject}</div>
+                        <span class="task-status ${process.status}">${process.status}</span>
+                    </div>
+                    <div class="text-xs text-text-secondary mb-1">From: ${process.from}</div>
+                    ${process.command ? `<div class="text-xs text-text-secondary mb-2">Command: ${process.command.substring(0, 80)}${process.command.length > 80 ? '...' : ''}</div>` : ''}
+                    ${process.status === 'completed' && process.response ? `<div class="text-xs mt-2 p-2 bg-green-50 rounded border border-green-200">✅ <strong>Result:</strong><br/>${process.response.substring(0, 500)}${process.response.length > 500 ? '...' : ''}</div>` : ''}
+                    ${process.status === 'failed' && process.error ? `<div class="text-xs mt-2 p-2 bg-red-50 rounded border border-red-200">❌ <strong>Error:</strong> ${process.error}</div>` : ''}
+                    <div class="text-xs text-text-secondary mt-2">
+                        Archived: ${new Date(archivedDate).toLocaleString()}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+// Archive a process (move from active to archived)
+async function archiveProcess(notificationId) {
+    try {
+        const response = await fetch(`/api/email/notifications/${notificationId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            // Remove from active notifications
+            allNotifications = allNotifications.filter(n => n.id !== notificationId);
+            // Refresh archived processes
+            await loadArchivedProcesses();
+            // Update views
+            updateScheduledProcessesView();
+            console.log('Process archived successfully');
+        } else {
+            console.error('Failed to archive process');
+        }
+    } catch (error) {
+        console.error('Error archiving process:', error);
+    }
+}
+
+// Load archived processes from backend
+async function loadArchivedProcesses() {
+    try {
+        const response = await fetch('/api/email/archived');
+        const data = await response.json();
+        
+        if (data.success && data.processes) {
+            archivedProcesses = data.processes;
+        } else {
+            archivedProcesses = [];
+        }
+    } catch (error) {
+        console.error('Error loading archived processes:', error);
+        archivedProcesses = [];
+    }
+}
+
+// Refresh scheduled processes
+async function refreshScheduledProcesses() {
+    // Load archived processes if on completed tab
+    if (currentScheduledProcessesTab === 'completed') {
+        await loadArchivedProcesses();
+    }
+    updateScheduledProcessesView();
+    // Also refresh notifications to get latest data
+    checkEmailNotifications();
+}
+
+// Update notifications view
+function updateNotificationsView() {
+    const notificationsList = document.getElementById('notifications-list');
+    if (!notificationsList) return;
+
+    if (allNotifications.length === 0) {
+        notificationsList.innerHTML = '<div class="text-center text-text-secondary">No notifications</div>';
+        return;
+    }
+
+    notificationsList.innerHTML = allNotifications.map(notification => {
+        const icon = notification.type === 'command' ? '⚙️' : '📧';
+        const unreadClass = notification.read ? '' : 'unread';
+
+        return `
+            <div class="notification-item ${unreadClass}">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="font-semibold text-sm">${icon} ${notification.subject}</div>
+                    ${!notification.read ? '<span class="text-xs text-blue-600 font-semibold">NEW</span>' : ''}
+                </div>
+                <div class="text-xs text-text-secondary mb-1">From: ${notification.from}</div>
+                ${notification.body ? `<div class="text-xs text-text-secondary">${notification.body.substring(0, 100)}${notification.body.length > 100 ? '...' : ''}</div>` : ''}
+                <div class="text-xs text-text-secondary mt-2">${new Date(notification.timestamp).toLocaleString()}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Poll for email command notifications
+async function checkEmailNotifications() {
+    try {
+        const response = await fetch('/api/email/notifications');
+        
+        if (!response.ok) {
+            console.warn(`Failed to fetch notifications: HTTP ${response.status}`);
+            return;
+        }
+        
+        const data = await response.json();
+
+        if (data.success) {
+            // Update our notifications list (always update, even if empty)
+            if (data.notifications && data.notifications.length > 0) {
+                allNotifications = data.notifications.map(n => ({
+                    ...n,
+                    read: shownNotifications.has(n.id)
+                }));
+
+                // Mark new notifications as shown (but don't mark them as read automatically)
+                data.notifications.forEach(notification => {
+                    if (!shownNotifications.has(notification.id)) {
+                        shownNotifications.add(notification.id);
+                        // Log new notifications for debugging
+                        console.log('New notification:', notification.type, notification.subject);
+                    }
+                });
+            } else {
+                allNotifications = [];
+            }
+
+            // Always update badges and views (even if empty)
+            updateMailboxBadge();
+            updateScheduledProcessesView();
+            updateNotificationsView();
+        } else {
+            console.warn('Failed to fetch notifications:', data);
+            allNotifications = [];
+            updateMailboxBadge();
+            updateScheduledProcessesView();
+            updateNotificationsView();
+        }
+    } catch (error) {
+        console.error('Error checking email notifications:', error);
+        // Still try to update views with empty list
+        allNotifications = [];
+        updateMailboxBadge();
+        updateScheduledProcessesView();
+        updateNotificationsView();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // File manager will refresh when window is opened
+
+    // Start polling for email notifications immediately and then every 10 seconds
+    checkEmailNotifications();
+    setInterval(checkEmailNotifications, 10000);
+    
+    // Also ensure desktop icons are initialized
+    setTimeout(() => {
+        ensureDesktopIcons();
+    }, 200);
 });
 
 // Load file manager on window creation
