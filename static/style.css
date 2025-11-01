@@ -1,0 +1,682 @@
+:root {
+    --sidebar-width: 380px;
+    --menu-bar-height: 28px;
+    --dock-height: 80px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    user-select: none;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.macos-body {
+    background: linear-gradient(180deg, #f5f5f7 0%, #ffffff 100%);
+    background-attachment: fixed;
+    position: relative;
+}
+
+/* macOS Menu Bar */
+.macos-menu-bar {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(30px) saturate(180%);
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.1);
+    height: var(--menu-bar-height);
+}
+
+.macos-menu-item {
+    color: rgba(0, 0, 0, 0.85);
+    cursor: default;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.macos-menu-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.macos-menu-divider {
+    width: 1px;
+    height: 14px;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+/* Desktop Icons */
+.desktop-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 90px;
+    max-width: 90px;
+    position: relative;
+}
+
+.desktop-file-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 90px;
+    max-width: 90px;
+    position: absolute;
+}
+
+.desktop-file-icon:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.desktop-file-icon:active {
+    transform: scale(0.95);
+}
+
+.context-menu-item {
+    transition: all 0.15s;
+}
+
+.context-menu-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.desktop-icon:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.desktop-icon:active {
+    transform: scale(0.95);
+}
+
+.icon-wrapper {
+    width: 72px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.05) inset;
+    transition: all 0.2s;
+}
+
+.desktop-icon[data-app="file_manager"] .icon-wrapper {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(99, 102, 241, 0.3));
+}
+
+.desktop-icon[data-app="terminal"] .icon-wrapper {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.3));
+}
+
+.desktop-icon[data-app="calculator"] .icon-wrapper {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(124, 58, 237, 0.3));
+}
+
+.desktop-icon[data-app="notepad"] .icon-wrapper {
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(217, 119, 6, 0.3));
+}
+
+.icon-label {
+    color: rgba(0, 0, 0, 0.8);
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: 6px;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+    text-align: center;
+}
+
+/* macOS Windows */
+.window {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(40px) saturate(180%);
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    border-radius: 16px;
+    box-shadow: 
+        0 20px 60px rgba(0, 0, 0, 0.15),
+        0 0 0 0.5px rgba(0, 0, 0, 0.05) inset,
+        0 1px 0 rgba(255, 255, 255, 0.8) inset;
+    display: flex;
+    flex-direction: column;
+    min-width: 600px;
+    min-height: 450px;
+    pointer-events: all;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    overflow: hidden;
+}
+
+.window.minimized {
+    transform: scale(0.85) translateY(100px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.window.maximized {
+    top: var(--menu-bar-height) !important;
+    left: 0 !important;
+    width: calc(100vw - var(--sidebar-width)) !important;
+    height: calc(100vh - var(--menu-bar-height) - var(--dock-height) - 16px) !important;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    border-bottom: none;
+}
+
+.window-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    background: rgba(0, 0, 0, 0.02);
+    backdrop-filter: blur(20px);
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px 16px 0 0;
+    cursor: move;
+    user-select: none;
+    height: 52px;
+}
+
+.window-header.maximized {
+    border-radius: 0;
+}
+
+.window-title-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    padding-left: 8px;
+}
+
+/* macOS Traffic Light Controls */
+.macos-traffic-lights {
+    display: flex;
+    gap: 8px;
+    padding: 12px 0;
+}
+
+.traffic-light {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 0.5px solid rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.traffic-light:hover {
+    filter: brightness(1.1);
+}
+
+.traffic-light.close {
+    background: #ff5f57;
+    box-shadow: 0 0 0 0.5px rgba(255, 95, 87, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.traffic-light.close:hover {
+    background: #ff3b30;
+}
+
+.traffic-light.minimize {
+    background: #ffbd2e;
+    box-shadow: 0 0 0 0.5px rgba(255, 189, 46, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.traffic-light.minimize:hover {
+    background: #ff9500;
+}
+
+.traffic-light.maximize {
+    background: #28c840;
+    box-shadow: 0 0 0 0.5px rgba(40, 200, 64, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.traffic-light.maximize:hover {
+    background: #20d948;
+}
+
+.window-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(0, 0, 0, 0.85);
+    font-weight: 500;
+    font-size: 13px;
+    flex: 1;
+}
+
+.window-content {
+    flex: 1;
+    padding: 24px;
+    overflow: auto;
+    color: rgba(0, 0, 0, 0.85);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* macOS Dock */
+.macos-dock {
+    height: var(--dock-height);
+}
+
+.dock-container {
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(30px) saturate(180%);
+    border-radius: 24px;
+    padding: 0 16px;
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.dock-item {
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dock-icon-wrapper {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(20px);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.dock-item:hover .dock-icon-wrapper {
+    transform: scale(1.3) translateY(-8px);
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.dock-item.active .dock-icon-wrapper {
+    transform: scale(1.15) translateY(-4px);
+    background: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.dock-divider {
+    width: 1px;
+    height: 48px;
+    background: rgba(0, 0, 0, 0.15);
+    margin: 0 8px;
+}
+
+/* Chat Sidebar */
+#chat-sidebar {
+    width: var(--sidebar-width);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(40px) saturate(180%);
+    border-left: 0.5px solid rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-header {
+    background: rgba(0, 0, 0, 0.02);
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+}
+
+.bg-sidebar {
+    background: rgba(255, 255, 255, 0.95);
+}
+
+.bg-input {
+    background: rgba(0, 0, 0, 0.03);
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(20px);
+}
+
+.bg-input:focus {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.bg-hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.border-border {
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.text-text-secondary {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.placeholder-text-secondary::placeholder {
+    color: rgba(0, 0, 0, 0.4);
+}
+
+#chat-messages {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+#chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+#chat-messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#chat-messages::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+#chat-messages::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.message {
+    padding: 12px 16px;
+    border-radius: 14px;
+    max-width: 85%;
+    word-wrap: break-word;
+    line-height: 1.5;
+    font-size: 13px;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.message.user {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.15));
+    color: rgba(0, 0, 0, 0.9);
+    margin-left: auto;
+    text-align: right;
+    border: 0.5px solid rgba(59, 130, 246, 0.2);
+    backdrop-filter: blur(10px);
+}
+
+.message.assistant {
+    background: rgba(0, 0, 0, 0.04);
+    color: rgba(0, 0, 0, 0.85);
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(10px);
+}
+
+.quick-cmd-btn {
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    backdrop-filter: blur(10px);
+}
+
+.quick-cmd-btn:hover {
+    background: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.15);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+/* App-specific styles */
+.calculator-display {
+    background: rgba(0, 0, 0, 0.05);
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: right;
+    font-size: 40px;
+    font-weight: 300;
+    margin-bottom: 20px;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+.calculator-buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.calc-btn {
+    padding: 20px;
+    border: none;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(10px);
+    color: rgba(0, 0, 0, 0.85);
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+}
+
+.calc-btn:hover {
+    background: rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.calc-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.calc-btn.operator {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.2));
+    color: white;
+}
+
+.calc-btn.operator:hover {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(99, 102, 241, 0.3));
+}
+
+.terminal-content {
+    background: rgba(0, 0, 0, 0.05);
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    padding: 20px;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+}
+
+.terminal-prompt {
+    color: #30d158;
+    font-weight: 600;
+}
+
+.terminal-output {
+    color: rgba(0, 0, 0, 0.85);
+    margin-bottom: 12px;
+}
+
+.notepad-editor {
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.02);
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    color: rgba(0, 0, 0, 0.85);
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 14px;
+    padding: 20px;
+    border-radius: 12px;
+    resize: none;
+    outline: none;
+    line-height: 1.7;
+    backdrop-filter: blur(10px);
+}
+
+.notepad-editor:focus {
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.file-manager-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 24px;
+    padding: 24px;
+}
+
+.file-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 0.5px solid transparent;
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.file-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.toolbar-btn {
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.toolbar-btn:hover {
+    background: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.15);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+/* Smooth animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+.window {
+    animation: fadeIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+#chat-sidebar {
+    animation: slideInRight 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Sidebar collapsed state */
+#chat-sidebar.collapsed {
+    width: 60px;
+    overflow: hidden;
+}
+
+#chat-sidebar.collapsed .sidebar-header > div:first-child > div:last-child,
+#chat-sidebar.collapsed #chat-messages,
+#chat-sidebar.collapsed .sidebar-footer {
+    display: none;
+}
+
+#chat-sidebar.collapsed #toggle-sidebar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(180deg);
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    z-index: 10;
+}
+
+#chat-sidebar.collapsed #toggle-sidebar:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+#chat-sidebar.collapsed #toggle-sidebar i {
+    transform: rotate(180deg);
+}
+
+/* Desktop background */
+.macos-body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+        radial-gradient(circle at 2px 2px, rgba(0, 0, 0, 0.02) 1px, transparent 0);
+    background-size: 50px 50px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+#desktop {
+    position: relative;
+    z-index: 1;
+}
+
+/* Selection */
+::selection {
+    background: rgba(59, 130, 246, 0.2);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    :root {
+        --sidebar-width: 100%;
+    }
+    
+    .window {
+        min-width: 100%;
+        min-height: 100%;
+    }
+}

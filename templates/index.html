@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=SF+Pro+Display:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="macos-body overflow-hidden">
+    <!-- macOS Menu Bar -->
+    <div id="menu-bar" class="fixed top-0 left-0 right-0 macos-menu-bar z-50" style="right: var(--sidebar-width, 0px);">
+        <div class="flex items-center justify-between px-4 h-7">
+            <div class="flex items-center gap-4 text-xs font-medium">
+                <span class="macos-menu-item">Agentic OS</span>
+                <div class="macos-menu-divider"></div>
+                <span class="macos-menu-item">File</span>
+                <span class="macos-menu-item">Edit</span>
+                <span class="macos-menu-item">View</span>
+                <span class="macos-menu-item">Window</span>
+                <span class="macos-menu-item">Help</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <button id="menu-bar-chat-btn" class="macos-menu-item" onclick="openChatSidebar()" title="Open Chat">
+                    <i class="fas fa-comments"></i>
+                </button>
+                <div id="menu-bar-clock" class="text-xs font-medium"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Desktop -->
+    <div id="desktop" class="absolute inset-0" style="top: 28px; bottom: 80px;">
+        <!-- App Icons -->
+        <div id="desktop-app-icons" class="absolute top-6 left-6 flex flex-col gap-5">
+            <div class="desktop-icon" data-app="file_manager">
+                <div class="icon-wrapper">
+                    <i class="fas fa-folder text-5xl"></i>
+                </div>
+                <span class="icon-label">Files</span>
+            </div>
+            <div class="desktop-icon" data-app="terminal">
+                <div class="icon-wrapper">
+                    <i class="fas fa-terminal text-5xl"></i>
+                </div>
+                <span class="icon-label">Terminal</span>
+            </div>
+            <div class="desktop-icon" data-app="calculator">
+                <div class="icon-wrapper">
+                    <i class="fas fa-calculator text-5xl"></i>
+                </div>
+                <span class="icon-label">Calculator</span>
+            </div>
+            <div class="desktop-icon" data-app="notepad">
+                <div class="icon-wrapper">
+                    <i class="fas fa-file-alt text-5xl"></i>
+                </div>
+                <span class="icon-label">Notepad</span>
+            </div>
+        </div>
+        
+        <!-- Desktop Files Container -->
+        <div id="desktop-files" class="absolute inset-0"></div>
+    </div>
+
+    <!-- Desktop Context Menu -->
+    <div id="desktop-context-menu" class="fixed hidden bg-menu backdrop-blur-xl border border-border rounded-lg shadow-2xl py-2 z-50 min-w-[180px]">
+        <button class="context-menu-item w-full text-left px-4 py-2 hover:bg-hover flex items-center gap-3" onclick="desktopCreateFile()">
+            <i class="fas fa-file-plus text-blue-400"></i>
+            <span>New File</span>
+        </button>
+        <button class="context-menu-item w-full text-left px-4 py-2 hover:bg-hover flex items-center gap-3" onclick="desktopCreateFolder()">
+            <i class="fas fa-folder-plus text-blue-400"></i>
+            <span>New Folder</span>
+        </button>
+        <div class="border-t border-border my-1"></div>
+        <button class="context-menu-item w-full text-left px-4 py-2 hover:bg-hover flex items-center gap-3" onclick="refreshDesktop()">
+            <i class="fas fa-sync-alt text-slate-400"></i>
+            <span>Refresh</span>
+        </button>
+    </div>
+
+    <!-- Windows Container -->
+    <div id="windows-container" class="absolute inset-0 pointer-events-none" style="top: 28px; bottom: 80px; right: var(--sidebar-width, 0px);"></div>
+
+    <!-- macOS Dock -->
+    <div id="dock" class="fixed bottom-2 left-1/2 -translate-x-1/2 macos-dock z-40" style="width: calc(100% - var(--sidebar-width, 0px) - 40px); max-width: 800px;">
+        <div class="dock-container flex items-end justify-center gap-2 h-full">
+            <div id="dock-items" class="flex items-end gap-1 pb-2">
+                <!-- Dock items will be added dynamically -->
+            </div>
+            <div class="dock-divider"></div>
+            <div id="dock-trash" class="dock-item">
+                <div class="dock-icon-wrapper">
+                    <i class="fas fa-trash text-2xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Sidebar (like Cursor) -->
+    <div id="chat-sidebar" class="fixed top-0 right-0 h-full bg-sidebar border-l border-border z-50 flex flex-col shadow-2xl">
+        <div class="sidebar-header flex items-center justify-between p-4 border-b border-border">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                    <i class="fas fa-sparkles text-white text-sm"></i>
+                </div>
+                <div>
+                    <h3 class="text-white font-semibold text-sm">OS Assistant</h3>
+                    <p class="text-text-secondary text-xs">Agentic Control</p>
+                </div>
+            </div>
+            <button id="toggle-sidebar" class="text-text-secondary hover:text-white transition p-2 hover:bg-hover rounded-lg">
+                <i class="fas fa-chevron-right text-xs"></i>
+            </button>
+        </div>
+        <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+        <div class="sidebar-footer p-4 border-t border-border">
+            <form id="chat-form" class="flex flex-col gap-2">
+                <div class="relative">
+                    <input 
+                        type="text" 
+                        id="chat-input" 
+                        placeholder="Ask me to control your OS..."
+                        class="w-full bg-input text-white px-4 py-3 pr-12 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm placeholder-text-secondary"
+                        autocomplete="off"
+                    >
+                    <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition text-xs">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="flex gap-1 flex-wrap">
+                    <button type="button" class="quick-cmd-btn" data-cmd="open calculator">Calculator</button>
+                    <button type="button" class="quick-cmd-btn" data-cmd="open terminal">Terminal</button>
+                    <button type="button" class="quick-cmd-btn" data-cmd="close all">Close All</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
