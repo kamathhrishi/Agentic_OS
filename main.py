@@ -92,8 +92,9 @@ conversation_history = {}
 # Format: List of emails with latest first
 email_inbox = []
 
-# Email API endpoint
+# Email API endpoints
 RAILWAY_EMAIL_API = "https://web-production-02ec.up.railway.app/compose-send"
+RAILWAY_EMAIL_INBOX_API = "https://web-production-02ec.up.railway.app/emails"
 
 # Browser instance (Playwright)
 browser_instance: Optional[Browser] = None
@@ -1401,17 +1402,99 @@ async def compose_and_send_email(email_data: ComposeEmail):
         })
 
 @app.get("/api/email/inbox")
-async def get_inbox():
-    """Get inbox emails (latest first)"""
+async def get_inbox(page: int = 1, per_page: int = 20, summaries: bool = True):
+    """Get inbox emails from external API with pagination (latest first)"""
     try:
-        return JSONResponse(content={
-            "success": True,
-            "emails": email_inbox,
-            "count": len(email_inbox)
-        })
+        # Fetch up to 100 emails from external Railway API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                RAILWAY_EMAIL_INBOX_API,
+                params={"limit": 100, "summaries": summaries}
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            # Process emails from external API
+            received_emails = []
+            if result.get("status") == "ok" and result.get("emails"):
+                for email in result.get("emails", []):
+                    email_entry = {
+                        "id": email.get("message_id", f"email_{len(received_emails)}"),
+                        "message_id": email.get("message_id"),
+                        "from": email.get("from", ""),
+                        "subject": email.get("subject", "(No subject)"),
+                        "body": email.get("text", email.get("html", "")),
+                        "html": email.get("html", ""),
+                        "text": email.get("text", ""),
+                        "thread_id": email.get("thread_id"),
+                        "timestamp": email.get("received_at", datetime.now().isoformat()),
+                        "received_at": email.get("received_at"),
+                        "sent": False,  # These are received emails
+                        "status": "received"
+                    }
+                    received_emails.append(email_entry)
+            
+            # Combine with locally stored sent emails (include all sent emails)
+            all_emails = received_emails + email_inbox
+            
+            # Sort by timestamp (most recent first)
+            # Use received_at if available, otherwise timestamp
+            def get_sort_key(email):
+                ts = email.get("received_at") or email.get("timestamp", "")
+                return ts if ts else "1970-01-01T00:00:00"
+            all_emails.sort(key=get_sort_key, reverse=True)
+            
+            # Calculate pagination
+            total_count = len(all_emails)
+            total_pages = (total_count + per_page - 1) // per_page if per_page > 0 else 1
+            page = max(1, min(page, total_pages))  # Ensure page is in valid range
+            
+            # Calculate slice indices
+            start_idx = (page - 1) * per_page
+            end_idx = start_idx + per_page
+            
+            # Get paginated emails
+            paginated_emails = all_emails[start_idx:end_idx]
+            
+            return JSONResponse(content={
+                "success": True,
+                "emails": paginated_emails,
+                "pagination": {
+                    "page": page,
+                    "per_page": per_page,
+                    "total": total_count,
+                    "total_pages": total_pages,
+                    "has_next": page < total_pages,
+                    "has_prev": page > 1
+                },
+                "received_count": len(received_emails),
+                "sent_count": len(email_inbox)
+            })
     except Exception as e:
         logger.error(f"Error fetching inbox: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Fallback to local emails if external API fails
+        total_count = len(email_inbox)
+        per_page = max(1, per_page)
+        total_pages = (total_count + per_page - 1) // per_page if per_page > 0 else 1
+        page = max(1, min(page, total_pages))
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        
+        return JSONResponse(content={
+            "success": True,
+            "emails": email_inbox[start_idx:end_idx],
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total_count,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1
+            },
+            "received_count": 0,
+            "sent_count": len(email_inbox),
+            "error": str(e)
+        })
 
 @app.get("/api/email/last")
 async def get_last_email():
@@ -1439,6 +1522,101 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "ok"}
 
+# ============================================
+# Hyperspell Integration Endpoints
+# ============================================
+
+from hyperspell_integration import (
+    get_hyperspell_client,
+    UserTokenRequest,
+    UserTokenResponse,
+    IntegrationInfo,
+    UserInfo
+)
+
+@app.post("/api/hyperspell/user-token", response_model=UserTokenResponse)
+async def generate_user_token(request: UserTokenRequest):
+    """
+    Generate a Hyperspell user token for the given user ID
+    This token is used to access Hyperspell Connect
+    """
+    try:
+        client = get_hyperspell_client()
+        token = client.generate_user_token(request.user_id)
+
+        return UserTokenResponse(
+            token=token,
+            user_id=request.user_id
+        )
+    except Exception as e:
+        logger.error(f"Error generating user token: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/hyperspell/integrations")
+async def list_integrations():
+    """
+    List all available Hyperspell integrations
+    """
+    try:
+        client = get_hyperspell_client()
+        integrations = client.list_integrations()
+
+        return {
+            "success": True,
+            "integrations": integrations
+        }
+    except Exception as e:
+        logger.error(f"Error listing integrations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/hyperspell/user/{user_id}")
+async def get_user_info(user_id: str):
+    """
+    Get user information including connected integrations
+    """
+    try:
+        client = get_hyperspell_client()
+        # In production, would pass user_token instead of generating here
+        user_token = client.generate_user_token(user_id)
+        user_info = client.get_user_info(user_token)
+
+        return {
+            "success": True,
+            "user": user_info
+        }
+    except Exception as e:
+        logger.error(f"Error getting user info: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/hyperspell/integration-link")
+async def get_integration_link(request: dict):
+    """
+    Generate a link to connect a specific integration
+    """
+    try:
+        integration_id = request.get("integration_id")
+        user_id = request.get("user_id", "default_user")
+        redirect_uri = request.get("redirect_uri")
+
+        if not integration_id:
+            raise HTTPException(status_code=400, detail="integration_id is required")
+
+        client = get_hyperspell_client()
+        user_token = client.generate_user_token(user_id)
+        link = client.get_integration_link(integration_id, user_token, redirect_uri)
+
+        return {
+            "success": True,
+            "link": link,
+            "integration_id": integration_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating integration link: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
 # Browser initialization
 async def init_browser():
     """Initialize Playwright browser"""

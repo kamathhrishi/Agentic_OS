@@ -151,6 +151,15 @@ You can type anything here...</textarea>
                     <div id="mailbox-inbox-view" class="mailbox-view">
                         <div class="text-center text-text-secondary">Loading inbox...</div>
                     </div>
+                    <div id="mailbox-pagination" class="hidden mt-4 pb-4 flex items-center justify-center gap-2 border-t border-border pt-4">
+                        <button id="mailbox-prev" class="toolbar-btn" onclick="mailboxPreviousPage()" disabled>
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <span id="mailbox-page-info" class="text-sm text-text-secondary px-4"></span>
+                        <button id="mailbox-next" class="toolbar-btn" onclick="mailboxNextPage()" disabled>
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
                     <div id="mailbox-compose-view" class="mailbox-view hidden">
                         <div class="mailbox-compose-form space-y-4">
                             <div>
@@ -261,6 +270,40 @@ You can type anything here...</textarea>
                                 <i class="fas fa-chevron-right"></i>
                             </button>
                             <iframe id="slideshow-player-iframe" class="w-full h-full border-0"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `
+    },
+    sync: {
+        title: 'Sync',
+        icon: 'fa-sync',
+        color: 'text-cyan-400',
+        content: `
+            <div class="sync-container h-full flex flex-col">
+                <div class="sync-header mb-4 pb-4 border-b border-border">
+                    <h2 class="text-xl font-semibold text-white mb-2">Data Sync</h2>
+                    <p class="text-sm text-text-secondary">Connect your accounts to sync data across platforms</p>
+                </div>
+
+                <div class="sync-content flex-1 overflow-auto">
+                    <div id="sync-loading" class="text-center text-text-secondary py-8">
+                        <i class="fas fa-spinner fa-spin text-3xl mb-3"></i>
+                        <p>Loading integrations...</p>
+                    </div>
+
+                    <div id="sync-integrations" class="hidden">
+                        <div class="mb-6">
+                            <h3 class="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-3">Available Integrations</h3>
+                            <div id="integrations-grid" class="grid grid-cols-2 gap-3"></div>
+                        </div>
+
+                        <div class="mt-6 pt-6 border-t border-border">
+                            <h3 class="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-3">Connected</h3>
+                            <div id="connected-integrations" class="space-y-2">
+                                <p class="text-sm text-text-secondary">No integrations connected yet</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -451,18 +494,25 @@ function createWindow(appName = 'default', title = null, position = null) {
         // Generate unique session ID for this browser window
         const sessionId = `browser_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         browserWindowSessions.set(windowId, sessionId);
-        
+
         // Store session ID in window element for easy access
         const windowElement = windows.get(windowId)?.element;
         if (windowElement) {
             windowElement.dataset.browserSession = sessionId;
         }
-        
+
         setTimeout(() => {
             // Browser will be ready when user navigates
         }, 100);
+    } else if (appName === 'sync') {
+        // Initialize sync app
+        setTimeout(() => {
+            if (typeof syncLoadIntegrations === 'function') {
+                syncLoadIntegrations();
+            }
+        }, 100);
     }
-    
+
     return windowId;
 }
 
@@ -519,7 +569,7 @@ function updateDock() {
     dockItems.innerHTML = '';
     
     // Add apps to dock
-    const dockApps = ['file_manager', 'terminal', 'calculator', 'notepad', 'mailbox', 'browser', 'slideshow'];
+    const dockApps = ['file_manager', 'terminal', 'calculator', 'notepad', 'mailbox', 'browser', 'slideshow', 'sync'];
     dockApps.forEach(appName => {
         const app = appTemplates[appName];
         if (!app) return;
@@ -1459,6 +1509,9 @@ function createWindowWithInit(appName, title, position) {
 }
 
 // Mailbox Functions
+let mailboxCurrentPage = 1;
+const mailboxPerPage = 20;
+
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -1466,21 +1519,59 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-async function mailboxRefresh() {
+async function mailboxRefresh(page = 1) {
     const inboxView = document.getElementById('mailbox-inbox-view');
     const status = document.getElementById('mailbox-status');
+    const paginationEl = document.getElementById('mailbox-pagination');
+    const prevBtn = document.getElementById('mailbox-prev');
+    const nextBtn = document.getElementById('mailbox-next');
+    const pageInfo = document.getElementById('mailbox-page-info');
     
     if (!inboxView) return;
     
+    mailboxCurrentPage = page;
+    
     inboxView.innerHTML = '<div class="text-center text-text-secondary">Loading inbox...</div>';
     if (status) status.textContent = 'Loading...';
+    if (paginationEl) paginationEl.classList.add('hidden');
     
     try {
-        const response = await fetch('/api/email/inbox');
+        const response = await fetch(`/api/email/inbox?page=${page}&per_page=${mailboxPerPage}&summaries=true`);
         const data = await response.json();
         
         if (data.success) {
-            if (status) status.textContent = `${data.count} email${data.count !== 1 ? 's' : ''}`;
+            const pagination = data.pagination || {};
+            const totalCount = pagination.total || 0;
+            const receivedCount = data.received_count || 0;
+            const sentCount = data.sent_count || 0;
+            
+            if (status) {
+                let statusText = `${totalCount} email${totalCount !== 1 ? 's' : ''}`;
+                if (receivedCount > 0 || sentCount > 0) {
+                    statusText += ` (${receivedCount} received, ${sentCount} sent)`;
+                }
+                status.textContent = statusText;
+            }
+            
+            // Update pagination controls
+            if (paginationEl && pagination.total_pages > 1) {
+                paginationEl.classList.remove('hidden');
+                if (pageInfo) {
+                    pageInfo.textContent = `Page ${pagination.page} of ${pagination.total_pages}`;
+                }
+                if (prevBtn) {
+                    prevBtn.disabled = !pagination.has_prev;
+                    prevBtn.style.opacity = pagination.has_prev ? '1' : '0.5';
+                    prevBtn.style.cursor = pagination.has_prev ? 'pointer' : 'not-allowed';
+                }
+                if (nextBtn) {
+                    nextBtn.disabled = !pagination.has_next;
+                    nextBtn.style.opacity = pagination.has_next ? '1' : '0.5';
+                    nextBtn.style.cursor = pagination.has_next ? 'pointer' : 'not-allowed';
+                }
+            } else if (paginationEl) {
+                paginationEl.classList.add('hidden');
+            }
             
             if (data.emails && data.emails.length > 0) {
                 inboxView.innerHTML = '';
@@ -1488,18 +1579,41 @@ async function mailboxRefresh() {
                     const emailItem = document.createElement('div');
                     emailItem.className = 'mailbox-email-item';
                     
-                    const timestamp = email.timestamp ? new Date(email.timestamp).toLocaleString() : 'Just now';
-                    const preview = email.body ? escapeHtml(email.body.substring(0, 100) + (email.body.length > 100 ? '...' : '')) : 'No preview';
-                    const to = escapeHtml(email.to || 'Unknown recipient');
+                    // Handle timestamp
+                    let timestamp = 'Just now';
+                    if (email.received_at) {
+                        timestamp = new Date(email.received_at).toLocaleString();
+                    } else if (email.timestamp) {
+                        timestamp = new Date(email.timestamp).toLocaleString();
+                    }
+                    
+                    // Get preview text
+                    const previewText = email.text || email.body || '';
+                    const preview = previewText ? escapeHtml(previewText.substring(0, 150).replace(/\n/g, ' ').trim() + (previewText.length > 150 ? '...' : '')) : 'No preview';
+                    
+                    // Determine sender/recipient
+                    const isReceived = email.sent === false || email.status === 'received';
+                    const senderRecipient = isReceived 
+                        ? escapeHtml(email.from || 'Unknown sender')
+                        : escapeHtml(email.to || 'Unknown recipient');
+                    
                     const subject = escapeHtml(email.subject || '(No subject)');
-                    const emailId = escapeHtml(String(email.id || ''));
+                    const emailId = escapeHtml(String(email.id || email.message_id || ''));
+                    
+                    // Status badge
+                    let statusBadge = '';
+                    if (email.status === 'sent' || email.sent === true) {
+                        statusBadge = '<span class="text-xs px-2 py-0.5 bg-green-500/20 text-green-600 rounded">Sent</span>';
+                    } else if (email.status === 'received' || isReceived) {
+                        statusBadge = '<span class="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-600 rounded">Received</span>';
+                    }
                     
                     emailItem.innerHTML = `
                         <div class="flex items-start gap-4 p-4 border-b border-border hover:bg-hover transition cursor-pointer" data-email-id="${emailId}">
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center gap-2 mb-1">
-                                    <span class="font-semibold text-black text-sm">${to}</span>
-                                    ${email.status === 'sent' ? '<span class="text-xs px-2 py-0.5 bg-green-500/20 text-green-600 rounded">Sent</span>' : ''}
+                                    <span class="font-semibold text-black text-sm">${senderRecipient}</span>
+                                    ${statusBadge}
                                 </div>
                                 <div class="font-medium text-black text-sm mb-1">${subject}</div>
                                 <div class="text-xs text-text-secondary line-clamp-2">${preview}</div>
@@ -1508,7 +1622,7 @@ async function mailboxRefresh() {
                         </div>
                     `;
                     emailItem.querySelector('[data-email-id]').addEventListener('click', () => {
-                        mailboxViewEmail(emailId);
+                        mailboxViewEmail(emailId, email);
                     });
                     inboxView.appendChild(emailItem);
                 });
@@ -1530,12 +1644,34 @@ async function mailboxRefresh() {
     }
 }
 
+function mailboxPreviousPage() {
+    if (mailboxCurrentPage > 1) {
+        mailboxRefresh(mailboxCurrentPage - 1);
+        // Scroll to top of inbox
+        const inboxView = document.getElementById('mailbox-inbox-view');
+        if (inboxView) {
+            inboxView.scrollTop = 0;
+        }
+    }
+}
+
+function mailboxNextPage() {
+    mailboxRefresh(mailboxCurrentPage + 1);
+    // Scroll to top of inbox
+    const inboxView = document.getElementById('mailbox-inbox-view');
+    if (inboxView) {
+        inboxView.scrollTop = 0;
+    }
+}
+
 function mailboxCompose() {
     const inboxView = document.getElementById('mailbox-inbox-view');
     const composeView = document.getElementById('mailbox-compose-view');
     const instructionsTextarea = document.getElementById('compose-instructions');
+    const paginationEl = document.getElementById('mailbox-pagination');
     
     if (inboxView) inboxView.classList.add('hidden');
+    if (paginationEl) paginationEl.classList.add('hidden');
     if (composeView) {
         composeView.classList.remove('hidden');
         if (instructionsTextarea) {
@@ -1549,10 +1685,13 @@ function mailboxBackToInbox() {
     const inboxView = document.getElementById('mailbox-inbox-view');
     const composeView = document.getElementById('mailbox-compose-view');
     const instructionsTextarea = document.getElementById('compose-instructions');
+    const paginationEl = document.getElementById('mailbox-pagination');
     
     if (composeView) composeView.classList.add('hidden');
     if (inboxView) inboxView.classList.remove('hidden');
     if (instructionsTextarea) instructionsTextarea.value = '';
+    // Reset to first page when going back to inbox
+    mailboxRefresh(1);
 }
 
 async function mailboxSendEmail() {
@@ -1589,10 +1728,53 @@ async function mailboxSendEmail() {
     if (status) status.textContent = '';
 }
 
-function mailboxViewEmail(emailId) {
-    // For now, just show a simple view - could be expanded to show full email
-    // This could open a modal or detailed view
-    alert('Email detail view - Coming soon!');
+function mailboxViewEmail(emailId, emailData = null) {
+    // Create a modal to display email details
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-[100]';
+    modal.innerHTML = `
+        <div class="bg-menu border border-border rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b border-border">
+                <h3 class="text-white font-semibold text-lg">Email Details</h3>
+                <button onclick="this.closest('.fixed').remove()" class="text-text-secondary hover:text-white p-2">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="flex-1 overflow-auto p-6">
+                ${emailData ? `
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-text-secondary text-xs uppercase tracking-wide">From</label>
+                            <p class="text-white text-sm mt-1">${escapeHtml(emailData.from || emailData.to || 'Unknown')}</p>
+                        </div>
+                        <div>
+                            <label class="text-text-secondary text-xs uppercase tracking-wide">Subject</label>
+                            <p class="text-white text-sm mt-1">${escapeHtml(emailData.subject || '(No subject)')}</p>
+                        </div>
+                        <div>
+                            <label class="text-text-secondary text-xs uppercase tracking-wide">Date</label>
+                            <p class="text-white text-sm mt-1">${emailData.received_at ? new Date(emailData.received_at).toLocaleString() : (emailData.timestamp ? new Date(emailData.timestamp).toLocaleString() : 'Unknown')}</p>
+                        </div>
+                        <div>
+                            <label class="text-text-secondary text-xs uppercase tracking-wide">Message</label>
+                            <div class="text-white text-sm mt-1 whitespace-pre-wrap bg-input/50 p-4 rounded-lg">
+                                ${escapeHtml(emailData.text || emailData.body || emailData.html || 'No content')}
+                            </div>
+                        </div>
+                    </div>
+                ` : '<p class="text-text-secondary">Loading email details...</p>'}
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
 }
 
 // Browser Functions
@@ -2183,7 +2365,161 @@ async function slideshowSave() {
     }
 }
 
+// ============================================
+// Sync Application Functions
+// ============================================
+
+let currentUserToken = null;
+const userId = 'default_user'; // In production, this would come from authentication
+
+async function syncLoadIntegrations() {
+    const loading = document.getElementById('sync-loading');
+    const integrationsView = document.getElementById('sync-integrations');
+    const integrationsGrid = document.getElementById('integrations-grid');
+
+    if (!integrationsGrid) return;
+
+    try {
+        // Generate user token
+        const tokenResponse = await fetch('/api/hyperspell/user-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+
+        const tokenData = await tokenResponse.json();
+        currentUserToken = tokenData.token;
+
+        // Fetch available integrations
+        const integrationsResponse = await fetch('/api/hyperspell/integrations');
+        const data = await integrationsResponse.json();
+
+        if (data.success && data.integrations) {
+            integrationsGrid.innerHTML = '';
+
+            data.integrations.forEach(integration => {
+                const card = document.createElement('div');
+                card.className = 'integration-card bg-slate-700/50 hover:bg-slate-700 p-4 rounded-lg border border-border hover:border-blue-500/50 transition cursor-pointer';
+                card.innerHTML = `
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                            <i class="fab ${integration.icon} text-white text-lg"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-white font-semibold text-sm mb-1">${integration.name}</h4>
+                            <p class="text-text-secondary text-xs line-clamp-2">${integration.description}</p>
+                        </div>
+                    </div>
+                    <button class="mt-3 w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium px-3 py-2 rounded-lg transition" onclick="syncConnectIntegration('${integration.id}', '${integration.name}')">
+                        Connect
+                    </button>
+                `;
+                integrationsGrid.appendChild(card);
+            });
+
+            if (loading) loading.classList.add('hidden');
+            if (integrationsView) integrationsView.classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Error loading integrations:', error);
+        if (loading) {
+            loading.innerHTML = `
+                <i class="fas fa-exclamation-triangle text-3xl mb-3 text-red-400"></i>
+                <p>Error loading integrations</p>
+            `;
+        }
+    }
+}
+
+async function syncConnectIntegration(integrationId, integrationName) {
+    try {
+        // Get the integration connection link
+        const response = await fetch('/api/hyperspell/integration-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                integration_id: integrationId,
+                user_id: userId,
+                redirect_uri: window.location.origin
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.link) {
+            // Open Hyperspell Connect in a new window
+            const connectWindow = window.open(
+                data.link,
+                `Connect ${integrationName}`,
+                'width=600,height=700,menubar=no,toolbar=no,location=no'
+            );
+
+            // Optional: Poll for connection status
+            if (connectWindow) {
+                const pollInterval = setInterval(() => {
+                    if (connectWindow.closed) {
+                        clearInterval(pollInterval);
+                        // Refresh integrations list
+                        syncRefreshConnectedIntegrations();
+                    }
+                }, 1000);
+            }
+        } else {
+            alert('Error generating connection link');
+        }
+    } catch (error) {
+        console.error('Error connecting integration:', error);
+        alert('Error connecting to integration');
+    }
+}
+
+async function syncRefreshConnectedIntegrations() {
+    const connectedDiv = document.getElementById('connected-integrations');
+    if (!connectedDiv) return;
+
+    try {
+        const response = await fetch(`/api/hyperspell/user/${userId}`);
+        const data = await response.json();
+
+        if (data.success && data.user) {
+            const connectedIntegrations = data.user.connected_integrations || [];
+
+            if (connectedIntegrations.length > 0) {
+                connectedDiv.innerHTML = connectedIntegrations.map(integration => `
+                    <div class="bg-slate-700/50 p-3 rounded-lg border border-border flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                                <i class="fas fa-check text-green-400"></i>
+                            </div>
+                            <span class="text-white text-sm font-medium">${integration}</span>
+                        </div>
+                        <button class="text-text-secondary hover:text-red-400 transition text-xs" onclick="syncDisconnectIntegration('${integration}')">
+                            Disconnect
+                        </button>
+                    </div>
+                `).join('');
+            } else {
+                connectedDiv.innerHTML = '<p class="text-sm text-text-secondary">No integrations connected yet</p>';
+            }
+        }
+    } catch (error) {
+        console.error('Error refreshing connected integrations:', error);
+    }
+}
+
+async function syncDisconnectIntegration(integrationId) {
+    if (!confirm(`Are you sure you want to disconnect ${integrationId}?`)) {
+        return;
+    }
+
+    // In production, this would call a disconnect API
+    alert('Disconnect functionality would be implemented with Hyperspell API');
+    syncRefreshConnectedIntegrations();
+}
+
+// ============================================
 // Keyboard navigation for slideshow
+// ============================================
 document.addEventListener('keydown', (e) => {
     const playerView = document.getElementById('slideshow-player-view');
     if (playerView && !playerView.classList.contains('hidden')) {
