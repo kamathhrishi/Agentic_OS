@@ -536,6 +536,41 @@ chatForm.addEventListener('submit', async (e) => {
                 const id = topWindow.id;
                 maximizeWindow(id);
             }
+        } else if (data.action === 'create_file') {
+            // Refresh desktop to show new file
+            refreshDesktop();
+            // If file manager is open, refresh it too
+            const fileManagerWindow = Array.from(document.querySelectorAll('.window'))
+                .find(w => w.querySelector('[data-app="file_manager"]') || w.innerHTML.includes('file-manager'));
+            if (fileManagerWindow) {
+                setTimeout(() => {
+                    if (typeof fileManagerRefresh === 'function') {
+                        fileManagerRefresh();
+                    }
+                }, 100);
+            }
+        } else if (data.action === 'find_file') {
+            // Results are already in the response message
+            // Could optionally highlight files in UI
+            if (data.data && data.data.files && data.data.files.length > 0) {
+                refreshDesktop();
+            }
+        } else if (data.action === 'delete_file') {
+            // Refresh desktop to remove deleted file
+            refreshDesktop();
+            // If file manager is open, refresh it too
+            const fileManagerWindow = Array.from(document.querySelectorAll('.window'))
+                .find(w => w.querySelector('[data-app="file_manager"]') || w.innerHTML.includes('file-manager'));
+            if (fileManagerWindow) {
+                setTimeout(() => {
+                    if (typeof fileManagerRefresh === 'function') {
+                        fileManagerRefresh();
+                    }
+                }, 100);
+            }
+        } else if (data.action === 'list_files') {
+            // Results are already in the response message
+            // Could optionally update file manager if open
         }
     } catch (error) {
         addChatMessage('Error: Could not connect to OS assistant.', 'assistant');
@@ -546,7 +581,20 @@ chatForm.addEventListener('submit', async (e) => {
 function addChatMessage(text, type) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
-    messageDiv.textContent = text;
+    // Handle multi-line messages and preserve line breaks
+    // Escape HTML to prevent XSS
+    const escapeHtml = (unsafe) => {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    };
+    const formattedText = text.split('\n').map(line => {
+        return escapeHtml(line) || ' '; // Preserve empty lines
+    }).join('<br>');
+    messageDiv.innerHTML = formattedText;
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -588,7 +636,7 @@ document.querySelectorAll('.quick-cmd-btn').forEach(btn => {
 
 // Welcome message
 setTimeout(() => {
-    addChatMessage('Hello! I\'m your OS assistant. You can control your OS using natural language. Try commands like "open calculator", "close all", or type "help" for more options.', 'assistant');
+    addChatMessage('Hello! I\'m your OS assistant powered by AI. You can control your OS using natural language. Try commands like:\n- "Create a file called notes.txt with some content"\n- "Find files with .txt extension"\n- "Delete the file notes.txt"\n- "Open calculator"\n- "List all files"\n\nI can create, find, and delete files - just ask me!', 'assistant');
 }, 500);
 
 // File Manager Functions

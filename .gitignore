@@ -13,6 +13,9 @@ build/
 .DS_Store
 *.log
 
+# Environment variables
+.env
+
 # Data directory (user files)
 data/
 !.gitkeep
