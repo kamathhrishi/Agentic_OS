@@ -8,9 +8,21 @@ from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
 import json
+import logging
 from dotenv import load_dotenv
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('chat.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Agentic OS")
 
@@ -94,10 +106,60 @@ async def chat_endpoint(request: Request):
     available_files = get_available_files()
     files_context = "\n".join([f"- {f['path']}" for f in available_files[:20]])  # Limit to first 20 files
     
-    # System prompt that instructs the LLM to return JSON actions
-    system_prompt = """You are an OS assistant that helps users control their operating system through natural language.
+    # Define explicit JSON schema for the response
+    response_schema = {
+        "type": "object",
+        "properties": {
+            "response": {
+                "type": "string",
+                "description": "Your conversational response to the user OR a helpful message explaining what action you took. Be natural and friendly in conversational mode."
+            },
+            "action": {
+                "type": ["string", "null"],
+                "enum": ["open_app", "close_all", "close_window", "minimize_window", "maximize_window", "create_file", "find_file", "delete_file", "list_files"],
+                "description": "Action name to perform, or null if just conversational. Must be one of: open_app, close_all, close_window, minimize_window, maximize_window, create_file, find_file, delete_file, list_files, or null."
+            },
+            "data": {
+                "type": "object",
+                "description": "Action-specific data. Empty object {} for conversational messages or when action is null.",
+                "properties": {
+                    "app": {
+                        "type": "string",
+                        "description": "App name (required for open_app): file_manager, terminal, calculator, notepad, or settings"
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Window title (optional for open_app)"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "File or directory path (required for create_file, delete_file, list_files)"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "File content (required for create_file)"
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "description": "Search pattern (required for find_file)"
+                    },
+                    "search_content": {
+                        "type": "boolean",
+                        "description": "Whether to search in file contents (for find_file, defaults to true)"
+                    }
+                }
+            }
+        },
+        "required": ["response", "action", "data"],
+        "additionalProperties": False
+    }
     
-You can perform the following actions:
+    # System prompt that allows both conversational and task-oriented interactions
+    system_prompt = """You are a helpful and friendly OS assistant that can engage in natural conversation AND help users control their operating system through natural language.
+
+You can have casual conversations with users - answer questions, provide explanations, chat about topics, etc. You're warm, intelligent, and engaging.
+
+When users want to perform actions on the system, you can execute the following:
 1. open_app - Open applications (file_manager, terminal, calculator, notepad, settings)
 2. close_all - Close all windows
 3. close_window - Close the topmost window
@@ -117,37 +179,162 @@ Use it like: "find recipes" (will search both filenames and contents), "find fil
 Available files in the system:
 """ + files_context + """
 
-You must respond with ONLY a valid JSON object in this exact format:
-{
-    "response": "A helpful message to the user explaining what you did or what you understood",
-    "action": "action_name (one of: open_app, close_all, close_window, minimize_window, maximize_window, create_file, find_file, delete_file, list_files, or null)",
-    "data": {
-        // Action-specific data:
-        // For open_app: {"app": "app_name", "title": "Window Title"}
-        // For create_file: {"path": "file/path.txt", "content": "file content"}
-        // For find_file: {"pattern": "search term", "search_content": true} (searches both filename and content)
-        // For delete_file: {"path": "file/path.txt"}
-        // For list_files: {"path": "directory/path"}
-        // For other actions: can be null or empty object
-    }
-}
+RESPONSE FORMAT - JSON SCHEMA:
+You must ALWAYS respond with ONLY a valid JSON object that conforms to this exact schema:
 
-IMPORTANT: Only return the JSON object, no other text before or after."""
+""" + json.dumps(response_schema, indent=2) + """
 
-    try:
-        # Call OpenAI API
-        completion = openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Using a cheaper model, can switch to gpt-4 if needed
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=0.7,
-            response_format={"type": "json_object"}  # Force JSON output
-        )
+EXAMPLES:
+- User: "Hello!" 
+  Response: {"response": "Hello! How can I help you today?", "action": null, "data": {}}
+
+- User: "What's 2+2?" 
+  Response: {"response": "2+2 equals 4! Is there anything else I can help you with?", "action": null, "data": {}}
+
+- User: "Create a file called notes.txt" 
+  Response: {"response": "I'll create that file for you!", "action": "create_file", "data": {"path": "Desktop/notes.txt", "content": ""}}
+
+- User: "Open calculator" 
+  Response: {"response": "Opening the calculator for you!", "action": "open_app", "data": {"app": "calculator", "title": "Calculator"}}
+
+- User: "Find files with .txt extension" 
+  Response: {"response": "Searching for files...", "action": "find_file", "data": {"pattern": ".txt", "search_content": true}}
+
+- User: "Tell me a joke" 
+  Response: {"response": "Why don't scientists trust atoms? Because they make up everything! 😄", "action": null, "data": {}}
+
+IMPORTANT: 
+- Always return ONLY the JSON object, no other text before or after
+- For conversational messages (no action needed), set "action" to null and "data" to {}
+- Ensure all JSON is valid and matches the schema exactly"""
+
+    # Valid action names
+    valid_actions = ["open_app", "close_all", "close_window", "minimize_window", "maximize_window", 
+                     "create_file", "find_file", "delete_file", "list_files"]
+    
+    def validate_response(response_dict):
+        """Validate the LLM response structure and action"""
+        # Check required fields exist
+        if not isinstance(response_dict, dict):
+            return False, "Response is not a dictionary"
         
-        # Parse the JSON response
-        llm_response = json.loads(completion.choices[0].message.content)
+        if "response" not in response_dict or not isinstance(response_dict["response"], str):
+            return False, "Missing or invalid 'response' field"
+        
+        if "action" not in response_dict:
+            return False, "Missing 'action' field"
+        
+        if "data" not in response_dict or not isinstance(response_dict["data"], dict):
+            return False, "Missing or invalid 'data' field"
+        
+        # Validate action (can be null or a valid action string)
+        action = response_dict.get("action")
+        if action is not None:
+            if not isinstance(action, str) or action not in valid_actions:
+                return False, f"Invalid action: {action}. Must be one of {valid_actions} or null"
+        
+        return True, "Valid"
+    
+    try:
+        # Log the full system prompt
+        logger.info("=" * 80)
+        logger.info("SYSTEM PROMPT:")
+        logger.info("=" * 80)
+        logger.info(system_prompt)
+        logger.info("=" * 80)
+        logger.info(f"USER MESSAGE: {user_message}")
+        logger.info("=" * 80)
+        
+        # Retry logic - up to 3 attempts
+        max_retries = 3
+        llm_response = None
+        raw_response = None
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"API Call Attempt {attempt}/{max_retries}")
+                
+                # Call OpenAI API with explicit JSON schema
+                completion = openai_client.chat.completions.create(
+                    model="gpt-4.1-2025-04-14",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    temperature=0.7,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "chat_response",
+                            "strict": True,
+                            "schema": response_schema,
+                            "description": "Response schema for OS assistant chat interface"
+                        }
+                    }
+                )
+                
+                # Get the raw response
+                raw_response = completion.choices[0].message.content
+                
+                # Log the full LLM reply
+                logger.info("=" * 80)
+                logger.info(f"LLM REPLY (Attempt {attempt}):")
+                logger.info("=" * 80)
+                logger.info(raw_response)
+                logger.info("=" * 80)
+                
+                # Parse the JSON response
+                try:
+                    llm_response = json.loads(raw_response)
+                except json.JSONDecodeError as e:
+                    error_msg = f"Invalid JSON on attempt {attempt}: {str(e)}"
+                    logger.warning(error_msg)
+                    if attempt < max_retries:
+                        logger.info(f"Retrying... ({attempt + 1}/{max_retries})")
+                        continue
+                    else:
+                        raise Exception(f"Failed to parse JSON after {max_retries} attempts: {str(e)}")
+                
+                # Validate response structure and action
+                is_valid, validation_msg = validate_response(llm_response)
+                if not is_valid:
+                    error_msg = f"Invalid response on attempt {attempt}: {validation_msg}"
+                    logger.warning(error_msg)
+                    logger.warning(f"Response was: {json.dumps(llm_response, indent=2)}")
+                    if attempt < max_retries:
+                        logger.info(f"Retrying... ({attempt + 1}/{max_retries})")
+                        continue
+                    else:
+                        # On final attempt, create a safe fallback response
+                        logger.error(f"Failed validation after {max_retries} attempts. Using fallback.")
+                        llm_response = {
+                            "response": f"I encountered an error processing your request after {max_retries} attempts. Please try rephrasing your request.",
+                            "action": None,
+                            "data": {}
+                        }
+                        break
+                
+                # If we get here, response is valid
+                logger.info(f"Valid response received on attempt {attempt}")
+                break
+                
+            except Exception as e:
+                error_msg = f"Error on attempt {attempt}: {str(e)}"
+                logger.error(error_msg)
+                if attempt < max_retries:
+                    logger.info(f"Retrying... ({attempt + 1}/{max_retries})")
+                    continue
+                else:
+                    # Final fallback on complete failure
+                    raise Exception(f"Failed after {max_retries} attempts: {str(e)}")
+        
+        # Ensure we have a response (should always be set by this point)
+        if llm_response is None:
+            llm_response = {
+                "response": "I encountered an error processing your request. Please try again.",
+                "action": None,
+                "data": {}
+            }
         
         # Execute file operations if needed
         action = llm_response.get("action")
